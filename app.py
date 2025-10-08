@@ -337,13 +337,27 @@ def main():
             padding: 20px;
         }
         
-        /* Remove white gaps */
+        /* Remove white gaps and extra spacing */
         .block-container {
             padding-top: 1rem;
             padding-bottom: 1rem;
         }
         .main .block-container {
             padding-top: 1rem;
+        }
+        
+        /* Remove extra white box around chat */
+        div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stVerticalBlock"] > div:has(> div.chat-container)) {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* Make chat container seamless */
+        .chat-container {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 10px 0;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -406,11 +420,9 @@ def main():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Chat container
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        # Chat container - No white box
         for msg in st.session_state.messages:
             display_message(msg)
-        st.markdown('</div>', unsafe_allow_html=True)
 
         # Quick replies for new chats
         if len(st.session_state.messages) <= 1:
