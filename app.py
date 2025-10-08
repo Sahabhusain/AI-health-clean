@@ -125,14 +125,36 @@ def bot_typing(container, text, delay=0.03):
                 </div>
                 <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
                             border:1px solid #e9ecef;font-style:italic;'>
-                    HealthBot is typing...
+                    HealthBot is typing<span id="dots">...</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-        time.sleep(1)
+        
+        # Animate typing dots
+        for i in range(3):
+            dots = "." * (i + 1)
+            typing_indicator.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
+                    <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                width:42px;height:42px;border-radius:50%;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
+                        <span style='color:white;font-size:20px;'>🤖</span>
+                    </div>
+                    <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
+                                border:1px solid #e9ecef;font-style:italic;'>
+                        HealthBot is typing<span id="dots">{dots}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            time.sleep(0.5)
     
+    # Clear typing indicator and show actual message
     typing_indicator.empty()
     
     # Type out the actual message
@@ -319,10 +341,6 @@ def main():
             margin: 10px 0;
             font-size: 14px;
         }
-        .chat-container {
-            min-height: 500px;
-            padding: 20px;
-        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -385,10 +403,10 @@ def main():
             del st.session_state.quick_question
 
         # Chat container
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for msg in st.session_state.messages:
-            display_message(msg)
-        st.markdown('</div>', unsafe_allow_html=True)
+        chat_container = st.container()
+        with chat_container:
+            for msg in st.session_state.messages:
+                display_message(msg)
 
         # Quick replies for new chats
         if len(st.session_state.messages) <= 1:
@@ -415,29 +433,33 @@ def main():
 
         # Process input when form is submitted
         if submitted and user_input:
-            # Add user message immediately
+            # Add user message
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Generate AI response
-            with st.spinner("🔍 Searching medical knowledge..."):
+            # Process AI response
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                user_message = st.session_state.messages[-1]["content"]
+                
+                # Generate and display AI response with typing effect
+                bot_container = st.empty()
                 try:
-                    answer = get_ai_response(user_input)
+                    answer = get_ai_response(user_message)
+                    bot_typing(bot_container, answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                     
                 except Exception as e:
                     error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-            # Auto-scroll to bottom and refresh
-            st.markdown(
-                """
-                <script>
-                    window.scrollTo(0, document.body.scrollHeight);
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
-            st.rerun()
+                # Auto-scroll to bottom
+                st.markdown(
+                    """
+                    <script>
+                        window.scrollTo(0, document.body.scrollHeight);
+                    </script>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 if __name__ == "__main__":
     main()
