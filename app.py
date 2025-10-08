@@ -11,261 +11,438 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import random
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
-# -------- CONFIGURATION --------
-DATA_PATH = r"data" # Use a relative path for better portability
+# -------- CONFIG --------
+DATA_PATH = r"C:\Users\sahah\Downloads\HealthChatbot\data"
 DB_FAISS_PATH = "vectorstore/db_faiss"
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Custom prompt template for the chatbot
 CUSTOM_PROMPT_TEMPLATE = """
-You are HealthBot, a professional and empathetic AI health assistant. Your goal is to provide accurate, detailed, and easy-to-understand health information based on the context provided.
+You are HealthBot, a friendly and caring health assistant. Be conversational, warm, and helpful.
 
 Context: {context}
 Question: {question}
 
-Based on the context, please provide a comprehensive and helpful answer. Structure your response clearly, using bullet points or numbered lists where appropriate to improve readability. Always maintain a supportive and caring tone.
+Respond like a real healthcare assistant having a friendly conversation:
 """
 
-# -------- CORE FUNCTIONS --------
-
 def set_custom_prompt():
-    """Creates and returns a PromptTemplate for the QA chain."""
     return PromptTemplate(
         template=CUSTOM_PROMPT_TEMPLATE,
         input_variables=["context", "question"]
     )
 
+# -------- Vectorstore Load/Build --------
 @st.cache_resource
 def build_vectorstore():
-    """
-    Builds or loads the FAISS vector store.
-    - Checks if a pre-built vector store exists.
-    - If not, it loads PDFs from the DATA_PATH, splits them into chunks,
-      creates embeddings, and saves the new vector store.
-    - Returns the vector store object or None if no PDFs are found.
-    """
-    if not GROQ_API_KEY:
-        st.error("GROQ_API_KEY not found! Please set it in your .env file.")
-        return None
-
     os.makedirs("vectorstore", exist_ok=True)
     
     try:
         embedding_model = HuggingFaceEmbeddings(
-            model_name='sentence-transformers/all-MiniLM-L6-v2',
-            model_kwargs={'device': 'cpu'} # Use CPU for broader compatibility
+            model_name='sentence-transformers/all-MiniLM-L6-v2'
         )
         
         if os.path.exists(DB_FAISS_PATH):
-            st.sidebar.success("✅ Knowledge Base loaded successfully!")
             return FAISS.load_local(
-                DB_FAISS_PATH,
-                embedding_model,
+                DB_FAISS_PATH, 
+                embedding_model, 
                 allow_dangerous_deserialization=True
             )
 
-        if os.path.exists(DATA_PATH) and any(f.endswith('.pdf') for f in os.listdir(DATA_PATH)):
-            with st.sidebar.status("Building Knowledge Base...", expand=True) as status:
-                st.write("Loading PDF documents...")
-                loader = DirectoryLoader(DATA_PATH, glob="*.pdf", loader_cls=PyPDFLoader)
-                documents = loader.load()
-                
-                st.write("Splitting documents into chunks...")
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        if os.path.exists(DATA_PATH):
+            loader = DirectoryLoader(DATA_PATH, glob="*.pdf", loader_cls=PyPDFLoader)
+            documents = loader.load()
+            
+            if documents:
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000, 
+                    chunk_overlap=200
+                )
                 docs = text_splitter.split_documents(documents)
-                
-                st.write("Creating vector embeddings...")
                 db = FAISS.from_documents(docs, embedding_model)
                 db.save_local(DB_FAISS_PATH)
-                status.update(label="✅ Knowledge Base built!", state="complete", expanded=False)
-            return db
+                return db
         
-        st.sidebar.warning("⚠️ No PDFs found in the 'data' folder. HealthBot will use its general knowledge.")
         return None
         
     except Exception as e:
-        st.sidebar.error(f"❌ Error building knowledge base: {e}")
         return None
 
-def get_retrieval_qa_chain(vectorstore):
-    """Creates the RetrievalQA chain with a custom prompt."""
-    llm = ChatGroq(
-        model_name="llama-3.1-8b-instant",
-        temperature=0.2,
-        max_tokens=2048,
-        groq_api_key=GROQ_API_KEY
-    )
-    
-    return RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": set_custom_prompt()}
-    )
-
-def get_ai_response(question, vectorstore):
-    """
-    Gets a response from the AI.
-    - Tries to use the PDF knowledge base (RAG) first.
-    - If RAG fails or isn't available, it falls back to a direct LLM call.
-    """
+# -------- Direct AI Response --------
+def get_direct_ai_response(question):
     try:
-        if vectorstore:
-            qa_chain = get_retrieval_qa_chain(vectorstore)
-            result = qa_chain.invoke({"query": question})
-            return result["result"], result["source_documents"]
-        else:
-            # Fallback to direct AI response without RAG
-            llm = ChatGroq(
-                model_name="llama-3.1-8b-instant",
-                temperature=0.3,
-                max_tokens=2048,
-                groq_api_key=GROQ_API_KEY
-            )
-            response = llm.invoke(f"You are a helpful AI health assistant. Answer the following question: {question}")
-            return response.content, None
+        llm = ChatGroq(
+            model_name="llama-3.1-8b-instant",
+            temperature=0.8,
+            max_tokens=800,
+            groq_api_key=GROQ_API_KEY
+        )
+        
+        prompt = f"""
+        You're HealthBot, a friendly health assistant. The user asked: "{question}"
+        
+        Respond naturally like you're having a real conversation:
+        - Be warm and conversational
+        - Use simple, friendly language
+        - Show empathy and understanding
+        - Keep responses concise but helpful
+        - Use occasional emojis to make it friendly
+        - Sound like a real person chatting
+        
+        Response:"""
+        
+        response = llm.invoke(prompt)
+        return response.content
+        
     except Exception as e:
-        error_msg = f"I apologize, but I'm facing a technical difficulty. Please try again. Error: {str(e)}"
-        return error_msg, None
+        return "Hey! I'm having some trouble right now. Could you try again? 😊"
 
-# -------- STREAMLIT UI --------
+# -------- Realistic Typing Effect --------
+def simulate_typing(container, text):
+    # Show thinking animation
+    with container:
+        thinking_container = st.empty()
+        
+        # Animated thinking dots
+        for i in range(3):
+            dots = "." * (i + 1)
+            thinking_container.markdown(f"""
+                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding: 10px 15px; background: #f8f9fa; border-radius: 15px; border: 1px solid #e9ecef; width: fit-content;'>
+                    <div style='width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center;'>
+                        <span style='color: white; font-size: 14px;'>AI</span>
+                    </div>
+                    <div style='font-size: 14px; color: #6c757d;'>HealthBot is thinking{dots}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            time.sleep(0.6)
+    
+    thinking_container.empty()
+    
+    # Type out message with realistic pacing
+    message_container = container.empty()
+    displayed_text = ""
+    
+    words = text.split()
+    
+    for i, word in enumerate(words):
+        displayed_text += word + " "
+        
+        # Create professional message bubble
+        message_container.markdown(f"""
+            <div style='display: flex; align-items: flex-start; gap: 10px; margin-bottom: 15px;'>
+                <div style='width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;'>
+                    <span style='color: white; font-size: 12px; font-weight: bold;'>AI</span>
+                </div>
+                <div style='background: linear-gradient(135deg, #f8f9fa, #ffffff); padding: 12px 16px; border-radius: 18px; border: 1px solid #e9ecef; max-width: 70%; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                    <div style='font-size: 14px; line-height: 1.5; color: #2d3748;'>{displayed_text.strip()}</div>
+                    <div style='font-size: 11px; color: #a0aec0; text-align: right; margin-top: 5px;'>{time.strftime('%H:%M')}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Realistic typing speed variations
+        if i < len(words) - 1:
+            if word.endswith(('.', '!', '?')):
+                time.sleep(0.4)  # Longer pause after sentences
+            elif len(word) > 6:
+                time.sleep(0.15)  # Slightly longer for long words
+            else:
+                time.sleep(0.08 + random.random() * 0.05)  # Natural variation
 
+# -------- Display Messages --------
 def display_message(msg):
-    """Displays a single message in the chat with custom styling."""
-    with st.chat_message(msg["role"], avatar="👤" if msg["role"] == "user" else "🤖"):
-        st.markdown(msg["content"])
-        # If the message is from the assistant and has sources, show them in an expander
-        if msg["role"] == "assistant" and "sources" in msg and msg["sources"]:
-            with st.expander("📚 View Sources"):
-                for source in msg["sources"]:
-                    # Check if 'source' metadata exists before accessing it
-                    source_name = source.metadata.get('source', 'Unknown Source')
-                    st.info(f"Source: {os.path.basename(source_name)}")
-                    st.markdown(f"> {source.page_content[:250]}...")
+    current_time = time.strftime('%H:%M')
+    
+    if msg["role"] == "user":
+        # User message - Right side with gradient
+        st.markdown(f"""
+            <div style='display: flex; justify-content: flex-end; align-items: flex-start; gap: 10px; margin-bottom: 15px;'>
+                <div style='background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 12px 16px; border-radius: 18px; max-width: 70%; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);'>
+                    <div style='font-size: 14px; line-height: 1.5;'>{msg['content']}</div>
+                    <div style='font-size: 11px; color: rgba(255,255,255,0.7); text-align: right; margin-top: 5px;'>{current_time} ✓</div>
+                </div>
+                <div style='width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #48bb78, #38a169); display: flex; align-items: center; justify-content: center; flex-shrink: 0;'>
+                    <span style='color: white; font-size: 14px;'>You</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Bot message - Left side with professional design
+        st.markdown(f"""
+            <div style='display: flex; align-items: flex-start; gap: 10px; margin-bottom: 15px;'>
+                <div style='width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;'>
+                    <span style='color: white; font-size: 12px; font-weight: bold;'>AI</span>
+                </div>
+                <div style='background: linear-gradient(135deg, #f8f9fa, #ffffff); padding: 12px 16px; border-radius: 18px; border: 1px solid #e9ecef; max-width: 70%; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                    <div style='font-size: 14px; line-height: 1.5; color: #2d3748;'>{msg['content']}</div>
+                    <div style='font-size: 11px; color: #a0aec0; text-align: right; margin-top: 5px;'>{current_time}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
+# -------- Get AI Response --------
+def get_ai_response(question):
+    try:
+        vectorstore = build_vectorstore()
+        
+        if vectorstore:
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=ChatGroq(
+                    model_name="llama-3.1-8b-instant",
+                    temperature=0.8,
+                    max_tokens=800,
+                    groq_api_key=GROQ_API_KEY
+                ),
+                chain_type="stuff",
+                retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
+                return_source_documents=False,
+                chain_type_kwargs={"prompt": set_custom_prompt()}
+            )
+            
+            result = qa_chain.invoke({"query": question})
+            return result["result"]
+        else:
+            return get_direct_ai_response(question)
+            
+    except Exception as e:
+        return get_direct_ai_response(question)
+
+# -------- Main App --------
 def main():
     st.set_page_config(
-        page_title="HealthBot - Your AI Health Assistant",
-        page_icon="🏥",
-        layout="centered",
-        initial_sidebar_state="expanded"
+        page_title="HealthBot AI Assistant",
+        page_icon="🤖",
+        layout="wide",
+        initial_sidebar_state="collapsed"
     )
 
-    # Custom CSS for a modern look
+    # Modern Professional Chat Interface CSS
     st.markdown("""
         <style>
-            /* Main chat container */
-            .st-emotion-cache-1jicfl2 {
-                padding-bottom: 5rem; /* Space for the sticky input */
-            }
-
-            /* Sticky input bar at the bottom */
-            .st-emotion-cache-1629p8f {
-                position: fixed;
-                bottom: 0;
-                width: 100%;
-                background-color: rgba(255, 255, 255, 0.9);
-                backdrop-filter: blur(10px);
-                padding: 1rem 1.5rem;
-                border-top: 1px solid #e0e0e0;
-                box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-                z-index: 999;
-            }
-            
-            /* Chat message styling */
-            [data-testid="stChatMessage"] {
-                background-color: #f8f9fa;
-                border-radius: 12px;
-                padding: 1rem;
-                border: 1px solid #e9ecef;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            }
-            
-            /* User message specific styling */
-            [data-testid="stChatMessage"]:has(div[data-testid="stChatMessageContent"][class*="user"]) {
-                background-color: #e7f5ff;
-                border-color: #b3d7ff;
-            }
-
-            /* Sidebar styling */
-            [data-testid="stSidebar"] {
-                background-color: #f8f9fa;
-            }
+        .main {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .chat-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .chat-container {
+            padding: 25px;
+            height: 65vh;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        
+        .input-section {
+            background: white;
+            padding: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #48bb78;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .quick-btn {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 12px;
+            color: #4a5568;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .quick-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .stTextInput>div>div>input {
+            border-radius: 25px;
+            padding: 15px 20px;
+            font-size: 14px;
+            border: 2px solid #e2e8f0;
+            background: white;
+        }
+        
+        .stTextInput>div>div>input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .stButton>button {
+            border-radius: 25px;
+            padding: 14px 28px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
+
+    # Initialize chat
+    if 'messages' not in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. 🤖 I'm here to help you with any health-related questions, symptom analysis, medication information, or general wellness advice. What would you like to know today?"}
+        ]
+
+    # Main Chat Interface
+    st.markdown("""
+        <div class="chat-wrapper">
+            <div class="chat-header">
+                <h1 style="margin: 0 0 10px 0; font-size: 28px;">🤖 HealthBot AI</h1>
+                <p style="margin: 0; opacity: 0.9; font-size: 16px;">
+                    <span class="status-indicator"></span>
+                    Online • Ready to assist you
+                </p>
+            </div>
+            
+            <div class="chat-container">
+    """, unsafe_allow_html=True)
+
+    # Display chat messages
+    for msg in st.session_state.messages:
+        display_message(msg)
     
-    # --- Sidebar ---
-    with st.sidebar:
-        st.title("🏥 HealthBot")
-        st.markdown("Your trusted AI Health Assistant, powered by Llama 3.1.")
-        st.divider()
-        st.markdown("### 🛠️ Settings")
-        
-        # Build vectorstore and store in session state
-        if "vectorstore" not in st.session_state:
-            st.session_state.vectorstore = build_vectorstore()
+    st.markdown("</div>")  # Close chat-container
+    
+    # Input section
+    st.markdown('<div class="input-section">', unsafe_allow_html=True)
+    
+    # Quick action buttons
+    st.markdown("""
+        <div style="margin-bottom: 20px;">
+            <p style="font-size: 14px; color: #666; margin-bottom: 10px;">💡 <strong>Quick questions:</strong></p>
+            <div class="quick-actions">
+    """, unsafe_allow_html=True)
+    
+    quick_questions = [
+        "🤒 Cold symptoms", 
+        "😴 Sleep issues", 
+        "🍎 Diet advice", 
+        "💪 Exercise tips",
+        "😌 Stress relief",
+        "🌡️ Fever guidance"
+    ]
+    
+    cols = st.columns(6)
+    for i, question in enumerate(quick_questions):
+        with cols[i]:
+            if st.button(question, key=f"quick_{i}", use_container_width=True):
+                st.session_state.quick_question = question.split(" ")[1] + " advice"
+                st.rerun()
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    # Handle quick questions
+    current_input = ""
+    if hasattr(st.session_state, 'quick_question'):
+        current_input = st.session_state.quick_question
+        del st.session_state.quick_question
 
-        if st.button("🔄 Clear Chat History", use_container_width=True):
-            st.session_state.messages = []
+    # Input form
+    with st.form("chat_form", clear_on_submit=True):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            user_input = st.text_input(
+                "Type your health question...",
+                value=current_input,
+                placeholder="Ask me anything about health, symptoms, medications...",
+                key="user_input",
+                label_visibility="collapsed"
+            )
+        with col2:
+            submitted = st.form_submit_button("Send 💬", use_container_width=True)
+    
+    st.markdown('</div></div>', unsafe_allow_html=True)  # Close input-section and chat-wrapper
+
+    # Clear chat button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🔄 Start New Conversation", use_container_width=True):
+            st.session_state.messages = [
+                {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. 🤖 I'm here to help you with any health-related questions, symptom analysis, medication information, or general wellness advice. What would you like to know today?"}
+            ]
             st.rerun()
+
+    # Process message
+    if submitted and user_input:
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": user_input})
         
-        st.divider()
-        st.markdown("Made with ❤️ using [Streamlit](https://streamlit.io) & [LangChain](https://langchain.com)")
-
-    # --- Main Chat Interface ---
-    st.header("HealthBot AI Assistant")
-
-    # Medical Disclaimer
-    st.warning(
-        "**Disclaimer:** I am an AI assistant and not a medical professional. "
-        "The information I provide is for educational purposes only. "
-        "Please consult with a qualified healthcare provider for any medical advice or treatment."
-    )
-
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    # Display prior chat messages
-    for message in st.session_state.messages:
-        display_message(message)
-
-    # Chat input field
-    if prompt := st.chat_input("Ask me a health-related question..."):
-        # Add user message to history and display it
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        display_message({"role": "user", "content": prompt})
-
         # Generate and display bot response
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("HealthBot is thinking..."):
-                response, sources = get_ai_response(prompt, st.session_state.vectorstore)
-                
-                # Use a streaming-like effect for better UX
-                placeholder = st.empty()
-                full_response = ""
-                for chunk in response.split():
-                    full_response += chunk + " "
-                    time.sleep(0.02)
-                    placeholder.markdown(full_response + "▌")
-                placeholder.markdown(full_response)
-
-        # Add the complete bot message to history (with sources)
-        bot_message = {"role": "assistant", "content": full_response, "sources": sources}
-        st.session_state.messages.append(bot_message)
+        bot_container = st.empty()
+        try:
+            response = get_ai_response(user_input)
+            simulate_typing(bot_container, response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        except Exception as e:
+            st.session_state.messages.append({"role": "assistant", "content": "I apologize, but I'm experiencing some technical difficulties. Please try again in a moment! 😊"})
         
-        # Display sources if available
-        if sources:
-            with st.expander("📚 View Sources"):
-                for source in sources:
-                    source_name = source.metadata.get('source', 'Unknown Source')
-                    st.info(f"Source: {os.path.basename(source_name)}")
-                    st.markdown(f"> {source.page_content[:250]}...")
-
+        st.rerun()
 
 if __name__ == "__main__":
     main()
