@@ -105,9 +105,9 @@ def get_direct_ai_response(question):
     except Exception as e:
         return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
-# -------- Typing effect with realistic delays --------
+# -------- Realistic Typing Effect --------
 def bot_typing(container, text, delay=0.03):
-    """Enhanced typing effect with realistic behavior"""
+    """Realistic typing effect that feels like a real bot"""
     thinking_time = min(1.5, len(text) * 0.01)
     time.sleep(thinking_time)
     
@@ -135,11 +135,16 @@ def bot_typing(container, text, delay=0.03):
     
     typing_indicator.empty()
     
-    # Type out the actual message
+    # Type out the actual message with realistic pacing
     message_container = container.empty()
     typed = ""
-    for char in text:
-        typed += char
+    
+    # Split into words for more natural typing
+    words = text.split()
+    
+    for i, word in enumerate(words):
+        typed += word + " "
+        
         message_container.markdown(
             f"""
             <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
@@ -154,13 +159,21 @@ def bot_typing(container, text, delay=0.03):
                             box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
                             position:relative;'>
                     <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
-                    {typed}
+                    {typed.strip()}
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-        time.sleep(delay * random.uniform(0.5, 1.5))
+        
+        # Realistic typing speed variations
+        if i < len(words) - 1:
+            if word.endswith(('.', '!', '?')):
+                time.sleep(0.3)  # Longer pause after sentences
+            elif len(word) > 6:
+                time.sleep(0.15)  # Slightly longer for long words
+            else:
+                time.sleep(0.08 + random.random() * 0.05)  # Natural variation
 
 # -------- Display messages in sequence --------
 def display_message(msg):
@@ -284,7 +297,7 @@ def main():
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             font-weight: 700;
         }
         .stTextInput>div>div>input {
@@ -313,15 +326,24 @@ def main():
         }
         .success-box {
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            padding: 15px;
+            padding: 12px 15px;
             border-radius: 10px;
             border-left: 5px solid #28a745;
-            margin: 10px 0;
+            margin: 5px 0 15px 0;
             font-size: 14px;
         }
         .chat-container {
             min-height: 500px;
             padding: 20px;
+        }
+        
+        /* Remove white gaps */
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        .main .block-container {
+            padding-top: 1rem;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -371,7 +393,7 @@ def main():
     with col2:
         st.markdown('<h1 class="main-header">🏥 HealthBot AI Assistant</h1>', unsafe_allow_html=True)
         
-        # System status - Always ready!
+        # System status - No white gap
         st.markdown("""
         <div class="success-box">
             <strong>✅ System Status:</strong> AI Health Assistant is ready to help! Start typing your health questions below.
@@ -418,15 +440,16 @@ def main():
             # Add user message immediately
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Generate AI response
-            with st.spinner("🔍 Searching medical knowledge..."):
-                try:
-                    answer = get_ai_response(user_input)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                    
-                except Exception as e:
-                    error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            # Generate AI response with typing effect
+            bot_container = st.empty()
+            try:
+                answer = get_ai_response(user_input)
+                bot_typing(bot_container, answer)
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+            except Exception as e:
+                error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             # Auto-scroll to bottom and refresh
             st.markdown(
