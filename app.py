@@ -290,8 +290,19 @@ def main():
 
     # Check if user is logged in
     if not st.session_state.get('logged_in', False):
-        st.warning("🔐 Please login first!")
-        st.stop()
+        st.error("🔐 Please login first!")
+        st.info("Redirecting to login page...")
+        time.sleep(2)
+        # Use JavaScript redirect
+        st.markdown(
+            """
+            <script>
+                window.location.href = window.location.origin;
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+        return
 
     # Custom CSS for enhanced styling
     st.markdown("""
@@ -409,10 +420,19 @@ def main():
                 st.rerun()
         with col2:
             if st.button("🚪 Logout", use_container_width=True):
-                # Clear all session state
+                # Clear session state and redirect to login
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
-                st.rerun()
+                st.success("Logged out successfully!")
+                time.sleep(1)
+                st.markdown(
+                    """
+                    <script>
+                        window.location.href = window.location.origin;
+                    </script>
+                    """,
+                    unsafe_allow_html=True
+                )
 
     # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
