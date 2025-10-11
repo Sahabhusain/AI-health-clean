@@ -279,8 +279,130 @@ def get_ai_response(question):
         # Final fallback if everything fails
         return get_direct_ai_response(question)
 
-# -------- Main App --------
-def main():
+# -------- Login Page --------
+def login_page():
+    st.set_page_config(
+        page_title="HealthBot - Login",
+        page_icon="🔐",
+        layout="centered"
+    )
+    
+    st.markdown("""
+        <style>
+        .login-container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .login-card {
+            background: white;
+            padding: 40px 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
+        }
+        .stButton>button {
+            width: 100%;
+            border-radius: 25px;
+            padding: 12px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        .stTextInput>div>div>input {
+            border-radius: 10px;
+            padding: 12px 15px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+        <div class="login-container">
+            <div class="login-header">
+                <h1 style='font-size: 2.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;'>🏥 HealthBot</h1>
+                <p style='color: #666; font-size: 1.1rem;'>Your AI Health Assistant</p>
+            </div>
+            
+            <div class="login-card">
+    """, unsafe_allow_html=True)
+    
+    # Login Form
+    with st.form("login_form"):
+        st.subheader("🔐 Login to HealthBot")
+        
+        login_method = st.radio(
+            "Choose login method:",
+            ["Username/Password", "Gmail"],
+            horizontal=True
+        )
+        
+        if login_method == "Username/Password":
+            username = st.text_input("👤 Username", placeholder="Enter your username")
+            password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
+            
+            # Demo credentials
+            demo_credentials = {
+                "user": "password123",
+                "admin": "admin123",
+                "test": "test123"
+            }
+            
+        else:  # Gmail login
+            gmail = st.text_input("📧 Gmail", placeholder="Enter your Gmail address")
+            password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
+            
+            # For demo purposes, accept any gmail with password "gmail123"
+            demo_credentials = {"any_gmail": "gmail123"}
+        
+        submitted = st.form_submit_button("🚀 Login")
+        
+        if submitted:
+            if login_method == "Username/Password":
+                if username and password:
+                    if username in demo_credentials and password == demo_credentials[username]:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.session_state.user_type = "username"
+                        st.success(f"✅ Welcome back, {username}!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid username or password. Demo credentials: user/password123, admin/admin123, test/test123")
+                else:
+                    st.error("❌ Please fill in all fields")
+            
+            else:  # Gmail login
+                if gmail and password:
+                    if "@gmail.com" in gmail and password == "gmail123":
+                        st.session_state.logged_in = True
+                        st.session_state.username = gmail
+                        st.session_state.user_type = "gmail"
+                        st.success(f"✅ Welcome, {gmail}!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid Gmail or password. Use any Gmail with password: gmail123")
+                else:
+                    st.error("❌ Please fill in all fields")
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    # Demo credentials info
+    st.markdown("""
+        <div style='text-align: center; margin-top: 20px; color: #666;'>
+            <p><strong>Demo Credentials:</strong></p>
+            <p>Username: <code>user</code> | Password: <code>password123</code></p>
+            <p>Any Gmail | Password: <code>gmail123</code></p>
+        </div>
+    """, unsafe_allow_html=True)
+
+# -------- Main Chat App --------
+def main_chat_app():
     st.set_page_config(
         page_title="HealthBot - AI Health Assistant",
         page_icon="🏥",
@@ -332,10 +454,6 @@ def main():
             margin: 5px 0 15px 0;
             font-size: 14px;
         }
-        .chat-container {
-            min-height: 500px;
-            padding: 20px;
-        }
         
         /* Remove white gaps and extra spacing */
         .block-container {
@@ -346,18 +464,13 @@ def main():
             padding-top: 1rem;
         }
         
-        /* Remove extra white box around chat */
-        div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stVerticalBlock"] > div:has(> div.chat-container)) {
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        
-        /* Make chat container seamless */
-        .chat-container {
-            background: transparent;
-            border: none;
-            box-shadow: none;
-            padding: 10px 0;
+        .user-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            text-align: center;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -368,8 +481,17 @@ def main():
             {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
         ]
 
-    # Sidebar
+    # Sidebar with user info
     with st.sidebar:
+        # User info card
+        st.markdown(f"""
+            <div class="user-info">
+                <div style='font-size: 14px;'>👤 Logged in as</div>
+                <div style='font-weight: bold; font-size: 16px;'>{st.session_state.username}</div>
+                <div style='font-size: 12px; opacity: 0.8;'>{st.session_state.user_type.title()} User</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         st.markdown("""
             <div style='text-align: center; margin-bottom: 2rem;'>
                 <h1 style='color: #667eea; font-size: 1.8rem;'>🏥 HealthBot</h1>
@@ -398,8 +520,16 @@ def main():
         - First Aid Advice
         """)
         
-        if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
+                st.rerun()
+        with col2:
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.username = None
+                st.session_state.user_type = None
+                st.rerun()
 
     # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -420,7 +550,7 @@ def main():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Chat container - No white box
+        # Display all messages
         for msg in st.session_state.messages:
             display_message(msg)
 
@@ -473,6 +603,22 @@ def main():
                 unsafe_allow_html=True
             )
             st.rerun()
+
+# -------- Main App Router --------
+def main():
+    # Initialize session state for authentication
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'username' not in st.session_state:
+        st.session_state.username = None
+    if 'user_type' not in st.session_state:
+        st.session_state.user_type = None
+    
+    # Route to appropriate page
+    if not st.session_state.logged_in:
+        login_page()
+    else:
+        main_chat_app()
 
 if __name__ == "__main__":
     main()
