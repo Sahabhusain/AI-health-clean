@@ -19,9 +19,6 @@ DATA_PATH = r"C:\Users\sahah\Downloads\HealthChatbot\data"
 DB_FAISS_PATH = "vectorstore/db_faiss"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Debug: Check if API key is loaded
-print(f"GROQ_API_KEY loaded: {bool(GROQ_API_KEY)}")
-
 CUSTOM_PROMPT_TEMPLATE = """
 You are HealthBot, an AI health assistant. Use the provided context to give detailed and accurate health information.
 
@@ -82,10 +79,6 @@ def build_vectorstore():
 def get_direct_ai_response(question):
     """Get response directly from AI when no PDFs are available"""
     try:
-        # Check if API key is available
-        if not GROQ_API_KEY:
-            return "❌ Error: GROQ_API_KEY not found. Please check your environment variables."
-        
         llm = ChatGroq(
             model_name="llama-3.1-8b-instant",
             temperature=0.3,
@@ -110,17 +103,20 @@ def get_direct_ai_response(question):
         return response.content
         
     except Exception as e:
-        return f"❌ I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
+        return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
-# -------- Simple Typing Effect --------
-def show_typing_effect(container, text):
-    """Show simple typing effect"""
-    # Show thinking indicator
+# -------- Typing effect with realistic delays --------
+def bot_typing(container, text, delay=0.03):
+    """Enhanced typing effect with realistic behavior"""
+    thinking_time = min(1.5, len(text) * 0.01)
+    time.sleep(thinking_time)
+    
+    # Show typing indicator
     with container:
-        thinking_indicator = st.empty()
-        thinking_indicator.markdown(
+        typing_indicator = st.empty()
+        typing_indicator.markdown(
             """
-            <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
+            <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
                 <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                             width:42px;height:42px;border-radius:50%;
                             display:flex;align-items:center;justify-content:center;margin-right:12px;
@@ -129,44 +125,68 @@ def show_typing_effect(container, text):
                 </div>
                 <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
                             border:1px solid #e9ecef;font-style:italic;'>
-                    HealthBot is thinking...
+                    HealthBot is typing<span id="dots">...</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
+        
+        # Animate typing dots
+        for i in range(3):
+            dots = "." * (i + 1)
+            typing_indicator.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
+                    <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                width:42px;height:42px;border-radius:50%;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
+                        <span style='color:white;font-size:20px;'>🤖</span>
+                    </div>
+                    <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
+                                border:1px solid #e9ecef;font-style:italic;'>
+                        HealthBot is typing<span id="dots">{dots}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            time.sleep(0.5)
     
-    # Simulate thinking time
-    time.sleep(2)
-    thinking_indicator.empty()
+    # Clear typing indicator and show actual message
+    typing_indicator.empty()
     
-    # Show final message
-    container.markdown(
-        f"""
-        <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
-            <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        width:42px;height:42px;border-radius:50%;
-                        display:flex;align-items:center;justify-content:center;margin-right:12px;
-                        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                <span style='color:white;font-size:20px;'>🤖</span>
+    # Type out the actual message
+    message_container = container.empty()
+    typed = ""
+    for char in text:
+        typed += char
+        message_container.markdown(
+            f"""
+            <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
+                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            width:42px;height:42px;border-radius:50%;
+                            display:flex;align-items:center;justify-content:center;margin-right:12px;
+                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
+                    <span style='color:white;font-size:20px;'>🤖</span>
+                </div>
+                <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                            padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
+                            position:relative;'>
+                    <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
+                    {typed}
+                </div>
             </div>
-            <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                        padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
-                        position:relative;'>
-                <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
-                {text}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+            """,
+            unsafe_allow_html=True
+        )
+        time.sleep(delay * random.uniform(0.5, 1.5))
 
-# -------- Display messages in sequence --------
+# -------- Display messages with enhanced design --------
 def display_message(msg):
-    """Display single message with proper alignment"""
     if msg["role"] == "user":
-        # User message - Right side
         st.markdown(
             f"""
             <div style='display:flex; justify-content:flex-end; align-items:flex-start; margin-bottom:16px;'>
@@ -187,7 +207,6 @@ def display_message(msg):
             unsafe_allow_html=True
         )
     else:
-        # Bot message - Left side
         st.markdown(
             f"""
             <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
@@ -232,7 +251,7 @@ def create_quick_replies():
 # -------- Clear chat function --------
 def clear_chat():
     st.session_state.messages = [
-        {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
+        {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
     ]
 
 # -------- Get AI Response --------
@@ -265,249 +284,10 @@ def get_ai_response(question):
             
     except Exception as e:
         # Final fallback if everything fails
-        error_msg = f"❌ Error in AI response: {str(e)}"
-        print(f"AI Response Error: {e}")  # Debug print
         return get_direct_ai_response(question)
 
-# -------- LOGIN SYSTEM --------
-def show_login_page():
-    """Show login page"""
-    st.set_page_config(
-        page_title="HealthBot - Login",
-        page_icon="🔐",
-        layout="centered"
-    )
-    
-    st.markdown("""
-        <style>
-        .login-container {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-        .login-card {
-            background: white;
-            padding: 40px 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border: 1px solid #e0e0e0;
-        }
-        .stButton>button {
-            border-radius: 25px;
-            padding: 12px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            margin-top: 10px;
-        }
-        .stTextInput>div>div>input {
-            border-radius: 10px;
-            padding: 12px 15px;
-            margin-bottom: 15px;
-        }
-        .register-link {
-            text-align: center;
-            margin-top: 20px;
-            padding: 10px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-        <div class="login-container">
-            <div class="login-header">
-                <h1 style='font-size: 2.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;'>🏥 HealthBot</h1>
-                <p style='color: #666; font-size: 1.1rem;'>Your AI Health Assistant</p>
-            </div>
-            
-            <div class="login-card">
-    """, unsafe_allow_html=True)
-
-    # Initialize session state
-    if 'show_register' not in st.session_state:
-        st.session_state.show_register = False
-    if 'users' not in st.session_state:
-        st.session_state.users = {}
-    if 'gmail_users' not in st.session_state:
-        st.session_state.gmail_users = {}
-
-    # Show registration form if toggle is True
-    if st.session_state.show_register:
-        show_registration_form()
-    else:
-        show_login_form()
-    
-    st.markdown("</div></div>", unsafe_allow_html=True)
-    
-    # Demo credentials info
-    st.markdown("""
-        <div style='text-align: center; margin-top: 20px; color: #666;'>
-            <p><strong>Demo Credentials:</strong></p>
-            <p>Username: <code>user</code> | Password: <code>password123</code></p>
-            <p>Username: <code>admin</code> | Password: <code>admin123</code></p>
-            <p>Username: <code>test</code> | Password: <code>test123</code></p>
-            <p>Any Gmail | Password: <code>gmail123</code></p>
-        </div>
-    """, unsafe_allow_html=True)
-
-def show_registration_form():
-    """Show registration form"""
-    st.subheader("📝 Create Account")
-    
-    with st.form("register_form"):
-        register_method = st.radio(
-            "Choose account type:",
-            ["Username/Password", "Gmail"],
-            horizontal=True,
-            key="register_method"
-        )
-        
-        if register_method == "Username/Password":
-            new_username = st.text_input("👤 Choose Username", placeholder="Enter your username", key="reg_username")
-            new_password = st.text_input("🔒 Create Password", type="password", placeholder="Create a password", key="reg_password")
-            confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password", key="reg_confirm")
-            
-        else:  # Gmail registration
-            new_gmail = st.text_input("📧 Gmail Address", placeholder="Enter your Gmail address", key="reg_gmail")
-            new_password = st.text_input("🔒 Create Password", type="password", placeholder="Create a password", key="reg_gmail_password")
-            confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password", key="reg_gmail_confirm")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            register_submitted = st.form_submit_button("📝 Register", use_container_width=True)
-        with col2:
-            back_to_login = st.form_submit_button("🔙 Back to Login", use_container_width=True)
-        
-        if back_to_login:
-            st.session_state.show_register = False
-            st.rerun()
-        
-        if register_submitted:
-            if register_method == "Username/Password":
-                if new_username and new_password and confirm_password:
-                    if new_password == confirm_password:
-                        # Check if username already exists
-                        if new_username in st.session_state.users:
-                            st.error("❌ Username already exists! Please choose a different username.")
-                        else:
-                            # Store user data
-                            st.session_state.users[new_username] = new_password
-                            st.success("✅ Account created successfully! Please login with your new credentials.")
-                            time.sleep(2)
-                            st.session_state.show_register = False
-                            st.rerun()
-                    else:
-                        st.error("❌ Passwords do not match! Please try again.")
-                else:
-                    st.error("❌ Please fill in all fields!")
-            
-            else:  # Gmail registration
-                if new_gmail and new_password and confirm_password:
-                    if "@gmail.com" not in new_gmail:
-                        st.error("❌ Please enter a valid Gmail address!")
-                    elif new_password == confirm_password:
-                        # Check if Gmail already exists
-                        if new_gmail in st.session_state.gmail_users:
-                            st.error("❌ Gmail already registered! Please use a different Gmail.")
-                        else:
-                            # Store Gmail user data
-                            st.session_state.gmail_users[new_gmail] = new_password
-                            st.success("✅ Account created successfully! Please login with your Gmail.")
-                            time.sleep(2)
-                            st.session_state.show_register = False
-                            st.rerun()
-                    else:
-                        st.error("❌ Passwords do not match! Please try again.")
-                else:
-                    st.error("❌ Please fill in all fields!")
-
-def show_login_form():
-    """Show login form"""
-    st.subheader("🔐 Login to HealthBot")
-    
-    with st.form("login_form"):
-        login_method = st.radio(
-            "Choose login method:",
-            ["Username/Password", "Gmail"],
-            horizontal=True,
-            key="login_method"
-        )
-        
-        if login_method == "Username/Password":
-            username = st.text_input("👤 Username", placeholder="Enter your username", key="login_username")
-            password = st.text_input("🔒 Password", type="password", placeholder="Enter your password", key="login_password")
-            
-        else:  # Gmail login
-            gmail = st.text_input("📧 Gmail", placeholder="Enter your Gmail address", key="login_gmail")
-            password = st.text_input("🔒 Password", type="password", placeholder="Enter your password", key="login_gmail_password")
-        
-        login_submitted = st.form_submit_button("🚀 Login", use_container_width=True)
-        
-        if login_submitted:
-            if login_method == "Username/Password":
-                if username and password:
-                    # Check demo credentials first
-                    demo_credentials = {
-                        "user": "password123",
-                        "admin": "admin123",
-                        "test": "test123"
-                    }
-                    
-                    # Check registered users
-                    registered_users = st.session_state.users
-                    
-                    if username in demo_credentials and password == demo_credentials[username]:
-                        handle_successful_login(username, "username")
-                    elif username in registered_users and registered_users[username] == password:
-                        handle_successful_login(username, "username")
-                    else:
-                        st.error("❌ Invalid username or password!")
-                else:
-                    st.error("❌ Please fill in all fields!")
-            
-            else:  # Gmail login
-                if gmail and password:
-                    # Check demo Gmail
-                    demo_gmail_password = "gmail123"
-                    
-                    # Check registered Gmail users
-                    registered_gmail_users = st.session_state.gmail_users
-                    
-                    if "@gmail.com" in gmail and password == demo_gmail_password:
-                        handle_successful_login(gmail, "gmail")
-                    elif gmail in registered_gmail_users and registered_gmail_users[gmail] == password:
-                        handle_successful_login(gmail, "gmail")
-                    else:
-                        st.error("❌ Invalid Gmail or password!")
-                else:
-                    st.error("❌ Please fill in all fields!")
-    
-    # Register button below login form
-    st.markdown("---")
-    st.markdown('<div class="register-link">', unsafe_allow_html=True)
-    st.write("Don't have an account?")
-    if st.button("📝 Create New Account", use_container_width=True, key="register_btn"):
-        st.session_state.show_register = True
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-def handle_successful_login(username, user_type):
-    """Handle successful login"""
-    st.session_state.logged_in = True
-    st.session_state.username = username
-    st.session_state.user_type = user_type
-    st.session_state.show_healthbot = True  # Flag to show healthbot
-    st.success(f"✅ Welcome {'back' if user_type == 'username' else ''}, {username}!")
-    st.rerun()
-
-# -------- HEALTHBOT MAIN APP --------
-def show_healthbot_app():
-    """Show HealthBot application"""
+# -------- Main App --------
+def main():
     st.set_page_config(
         page_title="HealthBot - AI Health Assistant",
         page_icon="🏥",
@@ -524,7 +304,7 @@ def show_healthbot_app():
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: 2rem;
             font-weight: 700;
         }
         .stTextInput>div>div>input {
@@ -553,55 +333,23 @@ def show_healthbot_app():
         }
         .success-box {
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            padding: 12px 15px;
+            padding: 15px;
             border-radius: 10px;
             border-left: 5px solid #28a745;
-            margin: 5px 0 15px 0;
-            font-size: 14px;
-        }
-        
-        /* Remove white gaps and extra spacing */
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-        }
-        .main .block-container {
-            padding-top: 1rem;
-        }
-        
-        .user-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 10px;
             margin: 10px 0;
-            text-align: center;
-        }
-        
-        /* Chat container styling */
-        .chat-container {
-            margin-bottom: 20px;
+            font-size: 14px;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # Initialize session state for messages
+    # Initialize session state
     if 'messages' not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
+            {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
         ]
 
-    # Sidebar with user info
+    # Sidebar
     with st.sidebar:
-        # User info card
-        st.markdown(f"""
-            <div class="user-info">
-                <div style='font-size: 14px;'>👤 Logged in as</div>
-                <div style='font-weight: bold; font-size: 16px;'>{st.session_state.username}</div>
-                <div style='font-size: 12px; opacity: 0.8;'>{st.session_state.user_type.title()} User</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
         st.markdown("""
             <div style='text-align: center; margin-bottom: 2rem;'>
                 <h1 style='color: #667eea; font-size: 1.8rem;'>🏥 HealthBot</h1>
@@ -630,16 +378,8 @@ def show_healthbot_app():
         - First Aid Advice
         """)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
-                st.rerun()
-        with col2:
-            if st.button("🚪 Logout", use_container_width=True):
-                # Clear session state
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
+        if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
+            st.rerun()
 
     # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -647,7 +387,7 @@ def show_healthbot_app():
     with col2:
         st.markdown('<h1 class="main-header">🏥 HealthBot AI Assistant</h1>', unsafe_allow_html=True)
         
-        # System status
+        # System status - Always ready!
         st.markdown("""
         <div class="success-box">
             <strong>✅ System Status:</strong> AI Health Assistant is ready to help! Start typing your health questions below.
@@ -660,11 +400,9 @@ def show_healthbot_app():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Chat container for messages
+        # Chat container
         chat_container = st.container()
-        
         with chat_container:
-            # Display all existing messages
             for msg in st.session_state.messages:
                 display_message(msg)
 
@@ -693,43 +431,33 @@ def show_healthbot_app():
 
         # Process input when form is submitted
         if submitted and user_input:
-            # Add user message immediately
+            # Add user message
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Show user message immediately
-            st.rerun()
-            
-            # Generate AI response
-            try:
-                # Create a temporary container for the response
-                response_container = st.empty()
+            # Process AI response
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                user_message = st.session_state.messages[-1]["content"]
                 
-                # Show typing effect
-                show_typing_effect(response_container, "Generating response...")
-                
-                # Get AI response
-                answer = get_ai_response(user_input)
-                
-                # Add bot message to session state
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                
-            except Exception as e:
-                error_msg = f"❌ I apologize, but I encountered a technical issue. Please try again later. Error: {str(e)}"
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                # Generate and display AI response with typing effect
+                bot_container = st.empty()
+                try:
+                    answer = get_ai_response(user_message)
+                    bot_typing(bot_container, answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                    
+                except Exception as e:
+                    error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-            st.rerun()
-
-# -------- MAIN EXECUTION --------
-def main():
-    """Main function that decides which page to show"""
-    
-    # Check if user is logged in
-    if st.session_state.get('logged_in', False) and st.session_state.get('show_healthbot', False):
-        # User is logged in, show HealthBot
-        show_healthbot_app()
-    else:
-        # User is not logged in, show login page
-        show_login_page()
+                # Auto-scroll to bottom
+                st.markdown(
+                    """
+                    <script>
+                        window.scrollTo(0, document.body.scrollHeight);
+                    </script>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 if __name__ == "__main__":
     main()
