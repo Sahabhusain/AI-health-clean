@@ -19,6 +19,9 @@ DATA_PATH = r"C:\Users\sahah\Downloads\HealthChatbot\data"
 DB_FAISS_PATH = "vectorstore/db_faiss"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
+# Debug: Check if API key is loaded
+print(f"GROQ_API_KEY loaded: {bool(GROQ_API_KEY)}")
+
 CUSTOM_PROMPT_TEMPLATE = """
 You are HealthBot, an AI health assistant. Use the provided context to give detailed and accurate health information.
 
@@ -79,6 +82,10 @@ def build_vectorstore():
 def get_direct_ai_response(question):
     """Get response directly from AI when no PDFs are available"""
     try:
+        # Check if API key is available
+        if not GROQ_API_KEY:
+            return "❌ Error: GROQ_API_KEY not found. Please check your environment variables."
+        
         llm = ChatGroq(
             model_name="llama-3.1-8b-instant",
             temperature=0.3,
@@ -103,20 +110,17 @@ def get_direct_ai_response(question):
         return response.content
         
     except Exception as e:
-        return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
+        return f"❌ I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
-# -------- Realistic Typing Effect --------
-def stream_bot_response(text, container):
-    """Stream bot response with typing effect"""
-    # Clear the container first
-    container.empty()
-    
-    # Show typing indicator
+# -------- Simple Typing Effect --------
+def show_typing_effect(container, text):
+    """Show simple typing effect"""
+    # Show thinking indicator
     with container:
-        typing_indicator = st.empty()
-        typing_indicator.markdown(
+        thinking_indicator = st.empty()
+        thinking_indicator.markdown(
             """
-            <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
+            <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
                 <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                             width:42px;height:42px;border-radius:50%;
                             display:flex;align-items:center;justify-content:center;margin-right:12px;
@@ -133,42 +137,30 @@ def stream_bot_response(text, container):
         )
     
     # Simulate thinking time
-    time.sleep(1.5)
-    typing_indicator.empty()
+    time.sleep(2)
+    thinking_indicator.empty()
     
-    # Stream the actual response
-    message_container = container.empty()
-    full_response = ""
-    
-    # Split into sentences for more natural streaming
-    sentences = text.split('. ')
-    
-    for sentence in sentences:
-        if sentence.strip():
-            full_response += sentence + ". "
-            message_container.markdown(
-                f"""
-                <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
-                    <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                width:42px;height:42px;border-radius:50%;
-                                display:flex;align-items:center;justify-content:center;margin-right:12px;
-                                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                        <span style='color:white;font-size:20px;'>🤖</span>
-                    </div>
-                    <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                                padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
-                                box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
-                                position:relative;'>
-                        <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
-                        {full_response.strip()}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            time.sleep(0.5)  # Pause between sentences
-    
-    return full_response.strip()
+    # Show final message
+    container.markdown(
+        f"""
+        <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
+            <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        width:42px;height:42px;border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;margin-right:12px;
+                        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
+                <span style='color:white;font-size:20px;'>🤖</span>
+            </div>
+            <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                        padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
+                        position:relative;'>
+                <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
+                {text}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # -------- Display messages in sequence --------
 def display_message(msg):
@@ -242,7 +234,6 @@ def clear_chat():
     st.session_state.messages = [
         {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
     ]
-    st.session_state.show_typing = False
 
 # -------- Get AI Response --------
 def get_ai_response(question):
@@ -274,6 +265,8 @@ def get_ai_response(question):
             
     except Exception as e:
         # Final fallback if everything fails
+        error_msg = f"❌ Error in AI response: {str(e)}"
+        print(f"AI Response Error: {e}")  # Debug print
         return get_direct_ai_response(question)
 
 # -------- LOGIN SYSTEM --------
@@ -708,20 +701,20 @@ def show_healthbot_app():
             
             # Generate AI response
             try:
-                # Create a temporary container for streaming response
+                # Create a temporary container for the response
                 response_container = st.empty()
+                
+                # Show typing effect
+                show_typing_effect(response_container, "Generating response...")
                 
                 # Get AI response
                 answer = get_ai_response(user_input)
                 
-                # Stream the response with typing effect
-                final_response = stream_bot_response(answer, response_container)
-                
                 # Add bot message to session state
-                st.session_state.messages.append({"role": "assistant", "content": final_response})
+                st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
-                error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
+                error_msg = f"❌ I apologize, but I encountered a technical issue. Please try again later. Error: {str(e)}"
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             st.rerun()
