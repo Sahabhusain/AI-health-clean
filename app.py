@@ -177,6 +177,7 @@ def bot_typing(container, text, delay=0.03):
 
 # -------- Display messages in sequence --------
 def display_message(msg):
+    """Display single message with proper alignment"""
     if msg["role"] == "user":
         # User message - Right side
         st.markdown(
@@ -246,6 +247,7 @@ def clear_chat():
     st.session_state.messages = [
         {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
     ]
+    st.session_state.show_typing = False
 
 # -------- Get AI Response --------
 def get_ai_response(question):
@@ -587,14 +589,22 @@ def show_healthbot_app():
             margin: 10px 0;
             text-align: center;
         }
+        
+        /* Chat container styling */
+        .chat-container {
+            margin-bottom: 20px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    # Initialize session state for messages
+    # Initialize session state for messages and typing
     if 'messages' not in st.session_state:
         st.session_state.messages = [
             {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
         ]
+
+    if 'show_typing' not in st.session_state:
+        st.session_state.show_typing = False
 
     # Sidebar with user info
     with st.sidebar:
@@ -652,7 +662,7 @@ def show_healthbot_app():
     with col2:
         st.markdown('<h1 class="main-header">🏥 HealthBot AI Assistant</h1>', unsafe_allow_html=True)
         
-        # System status - No white gap
+        # System status
         st.markdown("""
         <div class="success-box">
             <strong>✅ System Status:</strong> AI Health Assistant is ready to help! Start typing your health questions below.
@@ -665,9 +675,23 @@ def show_healthbot_app():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Display all messages
-        for msg in st.session_state.messages:
-            display_message(msg)
+        # Chat container for messages
+        chat_container = st.container()
+        
+        with chat_container:
+            # Display all existing messages
+            for msg in st.session_state.messages:
+                display_message(msg)
+            
+            # Show typing effect for the latest bot response
+            if (st.session_state.messages and 
+                st.session_state.messages[-1]["role"] == "assistant" and 
+                st.session_state.show_typing):
+                
+                latest_msg = st.session_state.messages[-1]
+                typing_container = st.empty()
+                bot_typing(typing_container, latest_msg["content"])
+                st.session_state.show_typing = False
 
         # Quick replies for new chats
         if len(st.session_state.messages) <= 1:
@@ -697,26 +721,22 @@ def show_healthbot_app():
             # Add user message immediately
             st.session_state.messages.append({"role": "user", "content": user_input})
             
+            # Show user message immediately
+            st.rerun()
+            
             # Generate AI response with typing effect
-            bot_container = st.empty()
             try:
                 answer = get_ai_response(user_input)
-                bot_typing(bot_container, answer)
+                
+                # Add bot message to session state
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.session_state.show_typing = True
                 
             except Exception as e:
                 error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                st.session_state.show_typing = True
 
-            # Auto-scroll to bottom and refresh
-            st.markdown(
-                """
-                <script>
-                    window.scrollTo(0, document.body.scrollHeight);
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
             st.rerun()
 
 # -------- MAIN EXECUTION --------
