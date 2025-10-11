@@ -106,10 +106,10 @@ def get_direct_ai_response(question):
         return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
 # -------- Realistic Typing Effect --------
-def bot_typing(container, text, delay=0.03):
-    """Realistic typing effect that feels like a real bot"""
-    thinking_time = min(1.5, len(text) * 0.01)
-    time.sleep(thinking_time)
+def stream_bot_response(text, container):
+    """Stream bot response with typing effect"""
+    # Clear the container first
+    container.empty()
     
     # Show typing indicator
     with container:
@@ -125,55 +125,50 @@ def bot_typing(container, text, delay=0.03):
                 </div>
                 <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
                             border:1px solid #e9ecef;font-style:italic;'>
-                    HealthBot is typing...
+                    HealthBot is thinking...
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-        time.sleep(1)
     
+    # Simulate thinking time
+    time.sleep(1.5)
     typing_indicator.empty()
     
-    # Type out the actual message with realistic pacing
+    # Stream the actual response
     message_container = container.empty()
-    typed = ""
+    full_response = ""
     
-    # Split into words for more natural typing
-    words = text.split()
+    # Split into sentences for more natural streaming
+    sentences = text.split('. ')
     
-    for i, word in enumerate(words):
-        typed += word + " "
-        
-        message_container.markdown(
-            f"""
-            <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
-                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            width:42px;height:42px;border-radius:50%;
-                            display:flex;align-items:center;justify-content:center;margin-right:12px;
-                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                    <span style='color:white;font-size:20px;'>🤖</span>
+    for sentence in sentences:
+        if sentence.strip():
+            full_response += sentence + ". "
+            message_container.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
+                    <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                width:42px;height:42px;border-radius:50%;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
+                        <span style='color:white;font-size:20px;'>🤖</span>
+                    </div>
+                    <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                                padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
+                                position:relative;'>
+                        <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
+                        {full_response.strip()}
+                    </div>
                 </div>
-                <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                            padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
-                            position:relative;'>
-                    <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
-                    {typed.strip()}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Realistic typing speed variations
-        if i < len(words) - 1:
-            if word.endswith(('.', '!', '?')):
-                time.sleep(0.3)  # Longer pause after sentences
-            elif len(word) > 6:
-                time.sleep(0.15)  # Slightly longer for long words
-            else:
-                time.sleep(0.08 + random.random() * 0.05)  # Natural variation
+                """,
+                unsafe_allow_html=True
+            )
+            time.sleep(0.5)  # Pause between sentences
+    
+    return full_response.strip()
 
 # -------- Display messages in sequence --------
 def display_message(msg):
@@ -597,14 +592,11 @@ def show_healthbot_app():
         </style>
     """, unsafe_allow_html=True)
 
-    # Initialize session state for messages and typing
+    # Initialize session state for messages
     if 'messages' not in st.session_state:
         st.session_state.messages = [
             {"role": "assistant", "content": f"Hello {st.session_state.username}! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
         ]
-
-    if 'show_typing' not in st.session_state:
-        st.session_state.show_typing = False
 
     # Sidebar with user info
     with st.sidebar:
@@ -682,16 +674,6 @@ def show_healthbot_app():
             # Display all existing messages
             for msg in st.session_state.messages:
                 display_message(msg)
-            
-            # Show typing effect for the latest bot response
-            if (st.session_state.messages and 
-                st.session_state.messages[-1]["role"] == "assistant" and 
-                st.session_state.show_typing):
-                
-                latest_msg = st.session_state.messages[-1]
-                typing_container = st.empty()
-                bot_typing(typing_container, latest_msg["content"])
-                st.session_state.show_typing = False
 
         # Quick replies for new chats
         if len(st.session_state.messages) <= 1:
@@ -724,18 +706,23 @@ def show_healthbot_app():
             # Show user message immediately
             st.rerun()
             
-            # Generate AI response with typing effect
+            # Generate AI response
             try:
+                # Create a temporary container for streaming response
+                response_container = st.empty()
+                
+                # Get AI response
                 answer = get_ai_response(user_input)
                 
+                # Stream the response with typing effect
+                final_response = stream_bot_response(answer, response_container)
+                
                 # Add bot message to session state
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                st.session_state.show_typing = True
+                st.session_state.messages.append({"role": "assistant", "content": final_response})
                 
             except Exception as e:
                 error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                st.session_state.show_typing = True
 
             st.rerun()
 
