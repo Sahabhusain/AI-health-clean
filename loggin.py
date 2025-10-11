@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import os
 
 def main():
     st.set_page_config(
@@ -45,15 +46,6 @@ def main():
             margin-top: 20px;
             padding: 10px;
         }
-        .toggle-button {
-            background: transparent !important;
-            color: #667eea !important;
-            border: 2px solid #667eea !important;
-        }
-        .toggle-button:hover {
-            background: #667eea !important;
-            color: white !important;
-        }
         </style>
     """, unsafe_allow_html=True)
     
@@ -66,14 +58,31 @@ def main():
             
             <div class="login-card">
     """, unsafe_allow_html=True)
-    
-    # Initialize session state for registration
+
+    # Initialize session state
     if 'show_register' not in st.session_state:
         st.session_state.show_register = False
     if 'users' not in st.session_state:
         st.session_state.users = {}
     if 'gmail_users' not in st.session_state:
         st.session_state.gmail_users = {}
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+
+    # If user is already logged in, redirect to app
+    if st.session_state.get('logged_in', False):
+        st.success("✅ Already logged in! Redirecting...")
+        time.sleep(1)
+        # Use JavaScript redirect instead of switch_page
+        st.markdown(
+            """
+            <script>
+                window.location.href = "http://localhost:8501/app";
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+        return
 
     # Show registration form if toggle is True
     if st.session_state.show_register:
@@ -88,6 +97,8 @@ def main():
         <div style='text-align: center; margin-top: 20px; color: #666;'>
             <p><strong>Demo Credentials:</strong></p>
             <p>Username: <code>user</code> | Password: <code>password123</code></p>
+            <p>Username: <code>admin</code> | Password: <code>admin123</code></p>
+            <p>Username: <code>test</code> | Password: <code>test123</code></p>
             <p>Any Gmail | Password: <code>gmail123</code></p>
         </div>
     """, unsafe_allow_html=True)
@@ -118,9 +129,11 @@ def show_registration_form():
         with col1:
             register_submitted = st.form_submit_button("📝 Register", use_container_width=True)
         with col2:
-            if st.form_submit_button("🔙 Back to Login", use_container_width=True):
-                st.session_state.show_register = False
-                st.rerun()
+            back_to_login = st.form_submit_button("🔙 Back to Login", use_container_width=True)
+        
+        if back_to_login:
+            st.session_state.show_register = False
+            st.rerun()
         
         if register_submitted:
             if register_method == "Username/Password":
@@ -197,19 +210,9 @@ def show_login_form():
                     registered_users = st.session_state.users
                     
                     if username in demo_credentials and password == demo_credentials[username]:
-                        st.session_state.logged_in = True
-                        st.session_state.username = username
-                        st.session_state.user_type = "username"
-                        st.success(f"✅ Welcome back, {username}!")
-                        time.sleep(1)
-                        st.switch_page("app.py")
+                        handle_successful_login(username, "username")
                     elif username in registered_users and registered_users[username] == password:
-                        st.session_state.logged_in = True
-                        st.session_state.username = username
-                        st.session_state.user_type = "username"
-                        st.success(f"✅ Welcome back, {username}!")
-                        time.sleep(1)
-                        st.switch_page("app.py")
+                        handle_successful_login(username, "username")
                     else:
                         st.error("❌ Invalid username or password!")
                 else:
@@ -224,19 +227,9 @@ def show_login_form():
                     registered_gmail_users = st.session_state.gmail_users
                     
                     if "@gmail.com" in gmail and password == demo_gmail_password:
-                        st.session_state.logged_in = True
-                        st.session_state.username = gmail
-                        st.session_state.user_type = "gmail"
-                        st.success(f"✅ Welcome, {gmail}!")
-                        time.sleep(1)
-                        st.switch_page("app.py")
+                        handle_successful_login(gmail, "gmail")
                     elif gmail in registered_gmail_users and registered_gmail_users[gmail] == password:
-                        st.session_state.logged_in = True
-                        st.session_state.username = gmail
-                        st.session_state.user_type = "gmail"
-                        st.success(f"✅ Welcome, {gmail}!")
-                        time.sleep(1)
-                        st.switch_page("app.py")
+                        handle_successful_login(gmail, "gmail")
                     else:
                         st.error("❌ Invalid Gmail or password!")
                 else:
@@ -250,6 +243,28 @@ def show_login_form():
         st.session_state.show_register = True
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
+
+def handle_successful_login(username, user_type):
+    """Handle successful login"""
+    st.session_state.logged_in = True
+    st.session_state.username = username
+    st.session_state.user_type = user_type
+    st.success(f"✅ Welcome {'back' if user_type == 'username' else ''}, {username}!")
+    
+    # Show redirect message
+    st.info("🔄 Redirecting to HealthBot...")
+    
+    # Use JavaScript to redirect
+    st.markdown(
+        """
+        <script>
+            setTimeout(function() {
+                window.location.href = window.location.origin + "/app";
+            }, 1500);
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
