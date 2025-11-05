@@ -1,288 +1,27 @@
 import os
 import time
 import streamlit as st
-import sqlite3
-import hashlib
-import secrets
-from datetime import datetime
 from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
-from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import random
 from dotenv import load_dotenv
-from pathlib import Path
 
 # Load environment variables
 load_dotenv()
 
-# -------- CONFIGURATION --------
+# -------- CONFIG --------
 DATA_PATH = "data"
 DB_FAISS_PATH = "vectorstore/db_faiss"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-USER_DB_PATH = "users.db"
 
-# Available models
-MODELS = {
-    "🚀 Fast (8B)": "llama-3.1-8b-instant",
-    "⚡ Balanced (70B)": "llama-3.1-70b-versatile", 
-    "🎯 Detailed (Maverick)": "meta-llama/llama-4-maverick-17b-128e-instruct"
-}
+# Debug: Check API key
+print(f"GROQ_API_KEY available: {bool(GROQ_API_KEY)}")
 
-# -------- DATABASE FUNCTIONS --------
-def init_user_database():
-    """Initialize user database"""
-    conn = sqlite3.connect(USER_DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE,
-            password_hash TEXT NOT NULL,
-            salt TEXT NOT NULL,
-            full_name TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP,
-            is_active BOOLEAN DEFAULT TRUE
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_preferences (
-            preference_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            model_name TEXT DEFAULT 'llama-3.1-8b-instant',
-            language TEXT DEFAULT 'English',
-            response_style TEXT DEFAULT 'default',
-            theme TEXT DEFAULT 'light',
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-def hash_password(password, salt=None):
-    """Hash password with salt"""
-    if salt is None:
-        salt = secrets.token_hex(16)
-    password_hash = hashlib.pbkdf2_hmac(
-        'sha256', 
-        password.encode('utf-8'), 
-        salt.encode('utf-8'), 
-        100000
-    ).hex()
-    return password_hash, salt
-
-def verify_password(password, password_hash, salt):
-    """Verify password against hash"""
-    new_hash, _ = hash_password(password, salt)
-    return new_hash == password_hash
-
-def create_user(username, password, email=None, full_name=None):
-    """Create new user"""
-    try:
-        conn = sqlite3.connect(USER_DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT user_id FROM users WHERE username = ?", (username,))
-        if cursor.fetchone():
-            return False, "Username already exists"
-        
-        password_hash, salt = hash_password(password)
-        
-        cursor.execute('''
-            INSERT INTO users (username, email, password_hash, salt, full_name)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (username, email, password_hash, salt, full_name))
-        
-        user_id = cursor.lastrowid
-        
-        cursor.execute('''
-            INSERT INTO user_preferences (user_id)
-            VALUES (?)
-        ''', (user_id,))
-        
-        conn.commit()
-        conn.close()
-        return True, "User created successfully"
-        
-    except Exception as e:
-        return False, f"Error creating user: {str(e)}"
-
-def authenticate_user(username, password):
-    """Authenticate user"""
-    try:
-        conn = sqlite3.connect(USER_DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT user_id, username, password_hash, salt, full_name 
-            FROM users 
-            WHERE username = ? AND is_active = TRUE
-        ''', (username,))
-        
-        user = cursor.fetchone()
-        if not user:
-            return False, "User not found"
-        
-        user_id, username, password_hash, salt, full_name = user
-        
-        if verify_password(password, password_hash, salt):
-            cursor.execute('''
-                UPDATE users 
-                SET last_login = CURRENT_TIMESTAMP 
-                WHERE user_id = ?
-            ''', (user_id,))
-            conn.commit()
-            conn.close()
-            
-            return True, {
-                "user_id": user_id,
-                "username": username,
-                "full_name": full_name
-            }
-        else:
-            conn.close()
-            return False, "Invalid password"
-            
-    except Exception as e:
-        return False, f"Authentication error: {str(e)}"
-
-def get_user_preferences(user_id):
-    """Get user preferences"""
-    try:
-        conn = sqlite3.connect(USER_DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT model_name, language, response_style, theme
-            FROM user_preferences
-            WHERE user_id = ?
-        ''', (user_id,))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            return {
-                "model_name": result[0],
-                "language": result[1],
-                "response_style": result[2],
-                "theme": result[3]
-            }
-        return None
-        
-    except Exception as e:
-        return None
-
-def update_user_preferences(user_id, preferences):
-    """Update user preferences"""
-    try:
-        conn = sqlite3.connect(USER_DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE user_preferences 
-            SET model_name = ?, language = ?, response_style = ?, theme = ?
-            WHERE user_id = ?
-        ''', (
-            preferences.get('model_name'),
-            preferences.get('language'),
-            preferences.get('response_style'),
-            preferences.get('theme'),
-            user_id
-        ))
-        
-        conn.commit()
-        conn.close()
-        return True
-        
-    except Exception as e:
-        return False
-
-# -------- AUTHENTICATION COMPONENTS --------
-def show_login_sidebar():
-    """Show login/register options in sidebar"""
-    with st.sidebar:
-        st.markdown("### 🔐 Account")
-        
-        if st.session_state.get('logged_in'):
-            user = st.session_state.user
-            st.success(f"✅ Logged in as **{user['username']}**")
-            
-            if st.button("🚪 Logout", use_container_width=True):
-                logout()
-        else:
-            # Login/Register in expander
-            with st.expander("Login / Register", expanded=False):
-                tab1, tab2 = st.tabs(["Login", "Register"])
-                
-                with tab1:
-                    login_username = st.text_input("👤 Username", key="sidebar_login_user")
-                    login_password = st.text_input("🔒 Password", type="password", key="sidebar_login_pass")
-                    
-                    if st.button("🚀 Login", key="sidebar_login_btn", use_container_width=True):
-                        if login_username and login_password:
-                            success, result = authenticate_user(login_username, login_password)
-                            if success:
-                                st.session_state.user = result
-                                st.session_state.logged_in = True
-                                st.session_state.user_preferences = get_user_preferences(result["user_id"])
-                                st.success(f"✅ Welcome back, {result['username']}!")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error(f"❌ {result}")
-                        else:
-                            st.error("❌ Please fill in all fields")
-                
-                with tab2:
-                    reg_full_name = st.text_input("👤 Full Name", key="sidebar_reg_name")
-                    reg_username = st.text_input("👤 Username", key="sidebar_reg_user")
-                    reg_email = st.text_input("📧 Email", key="sidebar_reg_email")
-                    reg_password = st.text_input("🔒 Password", type="password", key="sidebar_reg_pass")
-                    reg_confirm = st.text_input("🔒 Confirm Password", type="password", key="sidebar_reg_confirm")
-                    
-                    if st.button("📝 Create Account", key="sidebar_reg_btn", use_container_width=True):
-                        if all([reg_username, reg_password, reg_confirm]):
-                            if reg_password == reg_confirm:
-                                if len(reg_password) >= 6:
-                                    success, message = create_user(reg_username, reg_password, reg_email, reg_full_name)
-                                    if success:
-                                        st.success("✅ Account created! Please login.")
-                                    else:
-                                        st.error(f"❌ {message}")
-                                else:
-                                    st.error("❌ Password must be at least 6 characters")
-                            else:
-                                st.error("❌ Passwords do not match")
-                        else:
-                            st.error("❌ Please fill in required fields")
-
-def logout():
-    """Logout user but preserve chat history"""
-    user_backup = st.session_state.get('user')
-    messages_backup = st.session_state.get('messages', [])
-    
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    
-    # Restore chat history for guest mode
-    st.session_state.messages = messages_backup
-    if user_backup:
-        st.session_state.previous_user = user_backup
-    
-    st.success("✅ Logged out successfully!")
-    time.sleep(1)
-    st.rerun()
-
-# -------- AI FUNCTIONS --------
 CUSTOM_PROMPT_TEMPLATE = """
 You are HealthBot, an AI health assistant. Use the provided context to give detailed and accurate health information.
 
@@ -298,6 +37,7 @@ def set_custom_prompt():
         input_variables=["context", "question"]
     )
 
+# -------- Vectorstore Load/Build --------
 @st.cache_resource
 def build_vectorstore():
     """Build or load vectorstore with caching"""
@@ -308,27 +48,23 @@ def build_vectorstore():
             model_name='sentence-transformers/all-MiniLM-L6-v2'
         )
         
+        # Check if vectorstore already exists
         if os.path.exists(DB_FAISS_PATH):
+            print("Loading existing vectorstore...")
             return FAISS.load_local(
                 DB_FAISS_PATH, 
                 embedding_model, 
                 allow_dangerous_deserialization=True
             )
 
+        # Create new vectorstore if PDFs exist
         if os.path.exists(DATA_PATH):
-            documents = []
-            
-            # Load PDFs
-            if any(Path(DATA_PATH).glob("*.pdf")):
-                pdf_loader = DirectoryLoader(DATA_PATH, glob="*.pdf", loader_cls=PyPDFLoader)
-                documents.extend(pdf_loader.load())
-            
-            # Load text files
-            if any(Path(DATA_PATH).glob("*.txt")):
-                text_loader = DirectoryLoader(DATA_PATH, glob="*.txt", loader_cls=TextLoader)
-                documents.extend(text_loader.load())
+            print("Loading PDF documents...")
+            loader = DirectoryLoader(DATA_PATH, glob="*.pdf", loader_cls=PyPDFLoader)
+            documents = loader.load()
             
             if documents:
+                print(f"Loaded {len(documents)} documents")
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=1000, 
                     chunk_overlap=200
@@ -336,17 +72,28 @@ def build_vectorstore():
                 docs = text_splitter.split_documents(documents)
                 db = FAISS.from_documents(docs, embedding_model)
                 db.save_local(DB_FAISS_PATH)
+                print("Vectorstore created successfully")
                 return db
+            else:
+                print("No documents found in data folder")
         
+        # If no PDFs found, return None (will use direct AI responses)
+        print("No vectorstore available, using direct AI responses")
         return None
         
     except Exception as e:
-        st.error(f"❌ Error loading knowledge base: {str(e)}")
+        print(f"Error loading knowledge base: {str(e)}")
         return None
 
+# -------- Direct AI Response (Fallback) --------
 def get_direct_ai_response(question):
     """Get response directly from AI when no PDFs are available"""
     try:
+        if not GROQ_API_KEY:
+            return "❌ Error: GROQ_API_KEY not found. Please check your .env file"
+        
+        print(f"Getting direct AI response for: {question}")
+        
         llm = ChatGroq(
             model_name="llama-3.1-8b-instant",
             temperature=0.3,
@@ -359,48 +106,57 @@ def get_direct_ai_response(question):
         
         User Question: {question}
         
-        Please provide:
-        1. Clear, factual health information
-        2. Practical advice and tips
-        3. Helpful recommendations
-        
-        Provide a detailed, informative response:
+        Please provide clear, factual health information with practical advice:
         """
         
         response = llm.invoke(health_prompt)
+        print("Direct AI response received")
         return response.content
         
     except Exception as e:
-        return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
+        error_msg = f"❌ I apologize, but I'm experiencing technical difficulties. Error: {str(e)}"
+        print(f"Error in direct AI response: {e}")
+        return error_msg
 
-def get_ai_response(question, model_name="llama-3.1-8b-instant"):
+# -------- Get AI Response --------
+def get_ai_response(question):
     """Get response from AI - tries PDF knowledge base first, falls back to direct AI"""
     try:
+        print(f"Processing question: {question}")
+        
+        # Try to use PDF knowledge base
         vectorstore = build_vectorstore()
         
         if vectorstore:
+            print("Using vectorstore for response...")
+            # Create QA chain with PDF knowledge
             qa_chain = RetrievalQA.from_chain_type(
                 llm=ChatGroq(
-                    model_name=model_name,
+                    model_name="llama-3.1-8b-instant",
                     temperature=0.3,
                     max_tokens=1024,
                     groq_api_key=GROQ_API_KEY
                 ),
                 chain_type="stuff",
-                retriever=vectorstore.as_retriever(search_kwargs={'k': 5}),
+                retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
                 return_source_documents=False,
                 chain_type_kwargs={"prompt": set_custom_prompt()}
             )
             
             result = qa_chain.invoke({"query": question})
+            print("Vectorstore response generated")
             return result["result"]
         else:
+            # Fallback to direct AI response
+            print("Using direct AI response (fallback)")
             return get_direct_ai_response(question)
             
     except Exception as e:
+        print(f"Error in get_ai_response: {e}")
+        # Final fallback if everything fails
         return get_direct_ai_response(question)
 
-# -------- CHAT FUNCTIONS --------
+# -------- Simple Message Display --------
 def display_message(msg):
     if msg["role"] == "user":
         st.markdown(
@@ -411,12 +167,6 @@ def display_message(msg):
                             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);position:relative;'>
                     <div style='font-weight:600;color:rgba(255,255,255,0.9);font-size:13px;margin-bottom:4px;'>You</div>
                     {msg['content']}
-                </div>
-                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            width:42px;height:42px;border-radius:50%;
-                            display:flex;align-items:center;justify-content:center;margin-left:12px;
-                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                    <span style='color:white;font-size:20px;'>👤</span>
                 </div>
             </div>
             """,
@@ -444,6 +194,7 @@ def display_message(msg):
             unsafe_allow_html=True
         )
 
+# -------- Quick reply buttons --------
 def create_quick_replies():
     quick_questions = [
         "What are common cold symptoms?",
@@ -463,14 +214,14 @@ def create_quick_replies():
                 st.session_state.quick_question = question
                 st.rerun()
 
+# -------- Clear chat function --------
 def clear_chat():
-    username = st.session_state.user['username'] if st.session_state.get('logged_in') else "Guest"
     st.session_state.messages = [
-        {"role": "assistant", "content": f"Hello {username}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
+        {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
     ]
 
-# -------- MAIN APP --------
-def main_app():
+# -------- Main App --------
+def main():
     st.set_page_config(
         page_title="HealthBot - AI Health Assistant",
         page_icon="🏥",
@@ -478,7 +229,7 @@ def main_app():
         initial_sidebar_state="expanded"
     )
 
-    # Custom CSS
+    # Custom CSS for enhanced styling
     st.markdown("""
         <style>
         .main-header {
@@ -487,7 +238,7 @@ def main_app():
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: 2rem;
             font-weight: 700;
         }
         .stTextInput>div>div>input {
@@ -495,65 +246,52 @@ def main_app():
             padding: 15px 20px;
             font-size: 16px;
             border: 2px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+        .stTextInput>div>div>input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
         }
         .stButton>button {
             border-radius: 25px;
             padding: 10px 24px;
             font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+        .sidebar .sidebar-content {
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
         }
         .success-box {
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-            padding: 12px 16px;
+            padding: 15px;
             border-radius: 10px;
             border-left: 5px solid #28a745;
-            margin: 10px 0 20px 0;
+            margin: 10px 0;
             font-size: 14px;
         }
-        .user-info {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 15px;
+        .error-box {
+            background: linear-gradient(135deg, #f8d7da 0%, #f1aeb5 100%);
+            padding: 15px;
             border-radius: 10px;
+            border-left: 5px solid #dc3545;
             margin: 10px 0;
-        }
-        .guest-info {
-            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
-            color: white;
-            padding: 12px 15px;
-            border-radius: 10px;
-            margin: 10px 0;
+            font-size: 14px;
         }
         </style>
     """, unsafe_allow_html=True)
 
     # Initialize session state
     if 'messages' not in st.session_state:
-        username = st.session_state.user['username'] if st.session_state.get('logged_in') else "Guest"
         st.session_state.messages = [
-            {"role": "assistant", "content": f"Hello {username}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
+            {"role": "assistant", "content": "Hello! I'm HealthBot, your AI health assistant. I can help you with:\n\n• Understanding symptoms and conditions\n• Medication information and side effects\n• Healthy lifestyle recommendations\n• Preventive care advice\n• General health questions\n\nWhat would you like to know about your health today? 😊"}
         ]
 
     # Sidebar
     with st.sidebar:
-        # User/Guest info
-        if st.session_state.get('logged_in'):
-            user = st.session_state.user
-            st.markdown(f"""
-                <div class="user-info">
-                    <div style='font-size: 14px;'>👤 Logged in as</div>
-                    <div style='font-weight: bold; font-size: 16px;'>{user['username']}</div>
-                    <div style='font-size: 12px; opacity: 0.8;'>{user.get('full_name', '')}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="guest-info">
-                    <div style='font-size: 14px;'>👤 Currently browsing as</div>
-                    <div style='font-weight: bold; font-size: 16px;'>Guest User</div>
-                    <div style='font-size: 12px; opacity: 0.8;'>Login to save preferences</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
         st.markdown("""
             <div style='text-align: center; margin-bottom: 2rem;'>
                 <h1 style='color: #667eea; font-size: 1.8rem;'>🏥 HealthBot</h1>
@@ -561,42 +299,19 @@ def main_app():
             </div>
         """, unsafe_allow_html=True)
         
-        # Login/Register Section
-        show_login_sidebar()
-        
-        st.markdown("---")
-        
-        # Settings
-        st.markdown("### ⚙️ Settings")
-        
-        if st.session_state.get('logged_in') and st.session_state.get('user_preferences'):
-            prefs = st.session_state.user_preferences
-            
-            # Model selection
-            selected_model_name = st.selectbox(
-                "🤖 AI Model",
-                options=list(MODELS.keys()),
-                index=0
-            )
-            selected_model = MODELS[selected_model_name]
-            
-            # Update preferences if changed
-            if selected_model != prefs.get('model_name'):
-                update_user_preferences(
-                    st.session_state.user['user_id'],
-                    {"model_name": selected_model}
-                )
-                st.session_state.user_preferences['model_name'] = selected_model
-                st.success("Preferences updated!")
+        # API Status
+        if not GROQ_API_KEY:
+            st.markdown("""
+                <div class="error-box">
+                    <strong>❌ API Error:</strong> GROQ_API_KEY not found
+                </div>
+            """, unsafe_allow_html=True)
         else:
-            # Guest model selection
-            selected_model_name = st.selectbox(
-                "🤖 AI Model",
-                options=list(MODELS.keys()),
-                index=0
-            )
-            selected_model = MODELS[selected_model_name]
-            st.session_state.guest_model = selected_model
+            st.markdown("""
+                <div class="success-box">
+                    <strong>✅ API Status:</strong> Connected
+                </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("### 📊 Chat Info")
         st.info(f"💬 Messages: {len(st.session_state.messages)}")
@@ -609,10 +324,26 @@ def main_app():
         - 🔒 Private and secure
         """)
         
+        st.markdown("### 🏥 Common Topics")
+        st.markdown("""
+        - Cold & Flu Symptoms
+        - Sleep Improvement  
+        - Nutrition & Diet
+        - Exercise Guidance
+        - Stress Management
+        - First Aid Advice
+        """)
+        
         if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
             st.rerun()
 
-    # Main content
+        # Debug info
+        with st.expander("🔧 Debug Info"):
+            st.write(f"API Key: {'✅ Found' if GROQ_API_KEY else '❌ Missing'}")
+            st.write(f"Data Path: {DATA_PATH}")
+            st.write(f"Vectorstore: {DB_FAISS_PATH}")
+
+    # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
@@ -621,9 +352,17 @@ def main_app():
         # System status
         vectorstore = build_vectorstore()
         if vectorstore:
-            st.success("✅ **System Ready** - AI with knowledge base")
+            st.markdown("""
+                <div class="success-box">
+                    <strong>✅ System Status:</strong> AI Health Assistant with knowledge base is ready!
+                </div>
+            """, unsafe_allow_html=True)
         else:
-            st.warning("⚠️ **Basic Mode** - Using general AI knowledge")
+            st.markdown("""
+                <div class="success-box">
+                    <strong>⚠️ System Status:</strong> Using general AI knowledge (upload PDFs for better responses)
+                </div>
+            """, unsafe_allow_html=True)
         
         # Handle quick questions
         current_input_value = ""
@@ -641,9 +380,10 @@ def main_app():
         if len(st.session_state.messages) <= 1:
             create_quick_replies()
 
-        # Input area
+        # Input area with enhanced design
         st.markdown("---")
         
+        # Use a form to handle input properly
         with st.form("chat_form", clear_on_submit=True):
             col_input, col_send = st.columns([4, 1])
             
@@ -659,39 +399,25 @@ def main_app():
             with col_send:
                 submitted = st.form_submit_button("Send 🚀", use_container_width=True)
 
-        # Process input
+        # Process input when form is submitted
         if submitted and user_input:
-            # Add user message
+            # Add user message immediately
             st.session_state.messages.append({"role": "user", "content": user_input})
             
             # Show user message immediately
             st.rerun()
             
             # Generate AI response
-            if st.session_state.get('logged_in'):
-                model_name = st.session_state.user_preferences.get('model_name', 'llama-3.1-8b-instant')
-            else:
-                model_name = st.session_state.get('guest_model', 'llama-3.1-8b-instant')
-            
             try:
-                answer = get_ai_response(user_input, model_name)
-                
-                # Add bot response
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+                with st.spinner("🤖 HealthBot is thinking..."):
+                    answer = get_ai_response(user_input)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
                 
             except Exception as e:
-                error_msg = f"I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
+                error_msg = f"❌ I apologize, but I encountered a technical issue. Please try again. Error: {str(e)}"
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             st.rerun()
-
-# -------- MAIN EXECUTION --------
-def main():
-    # Initialize database
-    init_user_database()
-    
-    # Start the app directly without login requirement
-    main_app()
 
 if __name__ == "__main__":
     main()
