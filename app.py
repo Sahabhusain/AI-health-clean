@@ -64,18 +64,6 @@ def init_user_database():
         )
     ''')
     
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-            session_id TEXT PRIMARY KEY,
-            user_id INTEGER,
-            title TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_updated TIMESTAMP,
-            message_count INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
     conn.commit()
     conn.close()
 
@@ -218,135 +206,78 @@ def update_user_preferences(user_id, preferences):
     except Exception as e:
         return False
 
-# -------- AUTHENTICATION PAGES --------
-def show_login_page():
-    """Show login/register page"""
-    st.set_page_config(
-        page_title="HealthBot - Login",
-        page_icon="🔐",
-        layout="centered"
-    )
-    
-    st.markdown("""
-        <style>
-        .login-container {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-        .login-card {
-            background: white;
-            padding: 40px 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border: 1px solid #e0e0e0;
-        }
-        .stButton>button {
-            border-radius: 25px;
-            padding: 12px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            margin-top: 10px;
-        }
-        .stTextInput>div>div>input {
-            border-radius: 10px;
-            padding: 12px 15px;
-            margin-bottom: 15px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-        <div class="login-container">
-            <div class="login-header">
-                <h1 style='font-size: 2.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;'>🏥 HealthBot</h1>
-                <p style='color: #666; font-size: 1.1rem;'>Your AI Health Assistant</p>
-            </div>
+# -------- AUTHENTICATION COMPONENTS --------
+def show_login_sidebar():
+    """Show login/register options in sidebar"""
+    with st.sidebar:
+        st.markdown("### 🔐 Account")
+        
+        if st.session_state.get('logged_in'):
+            user = st.session_state.user
+            st.success(f"✅ Logged in as **{user['username']}**")
             
-            <div class="login-card">
-    """, unsafe_allow_html=True)
-
-    # Login/Register Tabs
-    tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
-    
-    with tab1:
-        show_login_form()
-    
-    with tab2:
-        show_register_form()
-    
-    st.markdown("</div></div>", unsafe_allow_html=True)
-
-def show_login_form():
-    """Show login form"""
-    st.subheader("Login to HealthBot")
-    
-    with st.form("login_form"):
-        username = st.text_input("👤 Username", placeholder="Enter your username")
-        password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
-        
-        login_submitted = st.form_submit_button("🚀 Login", use_container_width=True)
-        
-        if login_submitted:
-            if username and password:
-                success, result = authenticate_user(username, password)
-                if success:
-                    st.session_state.user = result
-                    st.session_state.logged_in = True
-                    st.session_state.user_preferences = get_user_preferences(result["user_id"])
-                    st.success(f"✅ Welcome back, {result['username']}!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error(f"❌ {result}")
-            else:
-                st.error("❌ Please fill in all fields")
-
-def show_register_form():
-    """Show registration form"""
-    st.subheader("Create New Account")
-    
-    with st.form("register_form"):
-        full_name = st.text_input("👤 Full Name", placeholder="Enter your full name")
-        username = st.text_input("👤 Username", placeholder="Choose a username")
-        email = st.text_input("📧 Email", placeholder="Enter your email")
-        password = st.text_input("🔒 Password", type="password", placeholder="Create a password")
-        confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password")
-        
-        register_submitted = st.form_submit_button("📝 Create Account", use_container_width=True)
-        
-        if register_submitted:
-            if all([full_name, username, email, password, confirm_password]):
-                if password == confirm_password:
-                    if len(password) >= 6:
-                        success, message = create_user(username, password, email, full_name)
-                        if success:
-                            st.success("✅ Account created successfully! Please login.")
+            if st.button("🚪 Logout", use_container_width=True):
+                logout()
+        else:
+            # Login/Register in expander
+            with st.expander("Login / Register", expanded=False):
+                tab1, tab2 = st.tabs(["Login", "Register"])
+                
+                with tab1:
+                    login_username = st.text_input("👤 Username", key="sidebar_login_user")
+                    login_password = st.text_input("🔒 Password", type="password", key="sidebar_login_pass")
+                    
+                    if st.button("🚀 Login", key="sidebar_login_btn", use_container_width=True):
+                        if login_username and login_password:
+                            success, result = authenticate_user(login_username, login_password)
+                            if success:
+                                st.session_state.user = result
+                                st.session_state.logged_in = True
+                                st.session_state.user_preferences = get_user_preferences(result["user_id"])
+                                st.success(f"✅ Welcome back, {result['username']}!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {result}")
                         else:
-                            st.error(f"❌ {message}")
-                    else:
-                        st.error("❌ Password must be at least 6 characters long")
-                else:
-                    st.error("❌ Passwords do not match")
-            else:
-                st.error("❌ Please fill in all fields")
-
-def check_authentication():
-    """Check if user is authenticated"""
-    if not st.session_state.get('logged_in'):
-        show_login_page()
-        st.stop()
+                            st.error("❌ Please fill in all fields")
+                
+                with tab2:
+                    reg_full_name = st.text_input("👤 Full Name", key="sidebar_reg_name")
+                    reg_username = st.text_input("👤 Username", key="sidebar_reg_user")
+                    reg_email = st.text_input("📧 Email", key="sidebar_reg_email")
+                    reg_password = st.text_input("🔒 Password", type="password", key="sidebar_reg_pass")
+                    reg_confirm = st.text_input("🔒 Confirm Password", type="password", key="sidebar_reg_confirm")
+                    
+                    if st.button("📝 Create Account", key="sidebar_reg_btn", use_container_width=True):
+                        if all([reg_username, reg_password, reg_confirm]):
+                            if reg_password == reg_confirm:
+                                if len(reg_password) >= 6:
+                                    success, message = create_user(reg_username, reg_password, reg_email, reg_full_name)
+                                    if success:
+                                        st.success("✅ Account created! Please login.")
+                                    else:
+                                        st.error(f"❌ {message}")
+                                else:
+                                    st.error("❌ Password must be at least 6 characters")
+                            else:
+                                st.error("❌ Passwords do not match")
+                        else:
+                            st.error("❌ Please fill in required fields")
 
 def logout():
-    """Logout user"""
+    """Logout user but preserve chat history"""
+    user_backup = st.session_state.get('user')
+    messages_backup = st.session_state.get('messages', [])
+    
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    
+    # Restore chat history for guest mode
+    st.session_state.messages = messages_backup
+    if user_backup:
+        st.session_state.previous_user = user_backup
+    
     st.success("✅ Logged out successfully!")
     time.sleep(1)
     st.rerun()
@@ -470,56 +401,6 @@ def get_ai_response(question, model_name="llama-3.1-8b-instant"):
         return get_direct_ai_response(question)
 
 # -------- CHAT FUNCTIONS --------
-def bot_typing(container, text, delay=0.03):
-    """Enhanced typing effect with realistic behavior"""
-    thinking_time = min(1.5, len(text) * 0.01)
-    time.sleep(thinking_time)
-    
-    with container:
-        typing_indicator = st.empty()
-        typing_indicator.markdown(
-            """
-            <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
-                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            width:42px;height:42px;border-radius:50%;
-                            display:flex;align-items:center;justify-content:center;margin-right:12px;
-                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                    <span style='color:white;font-size:20px;'>🤖</span>
-                </div>
-                <div style='color:#666;background:#f8f9fa;padding:12px 16px;border-radius:18px;
-                            border:1px solid #e9ecef;font-style:italic;'>
-                    HealthBot is typing...
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        time.sleep(1.5)
-        typing_indicator.empty()
-        
-        message_container = container.empty()
-        message_container.markdown(
-            f"""
-            <div style='display:flex; align-items:flex-start; margin-bottom:16px;'>
-                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            width:42px;height:42px;border-radius:50%;
-                            display:flex;align-items:center;justify-content:center;margin-right:12px;
-                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);'>
-                    <span style='color:white;font-size:20px;'>🤖</span>
-                </div>
-                <div style='color:#2c3e50;background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                            padding:16px 20px;border-radius:20px;max-width:75%;line-height:1.6;font-size:15px;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.1);border:1px solid #e0e0e0;
-                            position:relative;'>
-                    <div style='font-weight:600;color:#667eea;font-size:13px;margin-bottom:4px;'>HealthBot</div>
-                    {text}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
 def display_message(msg):
     if msg["role"] == "user":
         st.markdown(
@@ -583,8 +464,9 @@ def create_quick_replies():
                 st.rerun()
 
 def clear_chat():
+    username = st.session_state.user['username'] if st.session_state.get('logged_in') else "Guest"
     st.session_state.messages = [
-        {"role": "assistant", "content": f"Hello {st.session_state.user['username']}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
+        {"role": "assistant", "content": f"Hello {username}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
     ]
 
 # -------- MAIN APP --------
@@ -634,26 +516,43 @@ def main_app():
             border-radius: 10px;
             margin: 10px 0;
         }
+        .guest-info {
+            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
+            color: white;
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
         </style>
     """, unsafe_allow_html=True)
 
     # Initialize session state
     if 'messages' not in st.session_state:
+        username = st.session_state.user['username'] if st.session_state.get('logged_in') else "Guest"
         st.session_state.messages = [
-            {"role": "assistant", "content": f"Hello {st.session_state.user['username']}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
+            {"role": "assistant", "content": f"Hello {username}! I'm HealthBot, your AI health assistant. How can I help you today? 😊"}
         ]
 
     # Sidebar
     with st.sidebar:
-        # User info
-        user = st.session_state.user
-        st.markdown(f"""
-            <div class="user-info">
-                <div style='font-size: 14px;'>👤 Logged in as</div>
-                <div style='font-weight: bold; font-size: 16px;'>{user['username']}</div>
-                <div style='font-size: 12px; opacity: 0.8;'>{user.get('full_name', '')}</div>
-            </div>
-        """, unsafe_allow_html=True)
+        # User/Guest info
+        if st.session_state.get('logged_in'):
+            user = st.session_state.user
+            st.markdown(f"""
+                <div class="user-info">
+                    <div style='font-size: 14px;'>👤 Logged in as</div>
+                    <div style='font-weight: bold; font-size: 16px;'>{user['username']}</div>
+                    <div style='font-size: 12px; opacity: 0.8;'>{user.get('full_name', '')}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+                <div class="guest-info">
+                    <div style='font-size: 14px;'>👤 Currently browsing as</div>
+                    <div style='font-weight: bold; font-size: 16px;'>Guest User</div>
+                    <div style='font-size: 12px; opacity: 0.8;'>Login to save preferences</div>
+                </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("""
             <div style='text-align: center; margin-bottom: 2rem;'>
@@ -662,10 +561,15 @@ def main_app():
             </div>
         """, unsafe_allow_html=True)
         
+        # Login/Register Section
+        show_login_sidebar()
+        
+        st.markdown("---")
+        
         # Settings
         st.markdown("### ⚙️ Settings")
         
-        if st.session_state.get('user_preferences'):
+        if st.session_state.get('logged_in') and st.session_state.get('user_preferences'):
             prefs = st.session_state.user_preferences
             
             # Model selection
@@ -684,6 +588,15 @@ def main_app():
                 )
                 st.session_state.user_preferences['model_name'] = selected_model
                 st.success("Preferences updated!")
+        else:
+            # Guest model selection
+            selected_model_name = st.selectbox(
+                "🤖 AI Model",
+                options=list(MODELS.keys()),
+                index=0
+            )
+            selected_model = MODELS[selected_model_name]
+            st.session_state.guest_model = selected_model
         
         st.markdown("### 📊 Chat Info")
         st.info(f"💬 Messages: {len(st.session_state.messages)}")
@@ -696,13 +609,8 @@ def main_app():
         - 🔒 Private and secure
         """)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
-                st.rerun()
-        with col2:
-            if st.button("🚪 Logout", use_container_width=True):
-                logout()
+        if st.button("🔄 Clear Chat", use_container_width=True, on_click=clear_chat):
+            st.rerun()
 
     # Main content
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -760,7 +668,10 @@ def main_app():
             st.rerun()
             
             # Generate AI response
-            model_name = st.session_state.user_preferences.get('model_name', 'llama-3.1-8b-instant')
+            if st.session_state.get('logged_in'):
+                model_name = st.session_state.user_preferences.get('model_name', 'llama-3.1-8b-instant')
+            else:
+                model_name = st.session_state.get('guest_model', 'llama-3.1-8b-instant')
             
             try:
                 answer = get_ai_response(user_input, model_name)
@@ -779,11 +690,8 @@ def main():
     # Initialize database
     init_user_database()
     
-    # Check authentication
-    if not st.session_state.get('logged_in'):
-        show_login_page()
-    else:
-        main_app()
+    # Start the app directly without login requirement
+    main_app()
 
 if __name__ == "__main__":
     main()
