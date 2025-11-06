@@ -45,6 +45,7 @@ def build_vectorstore():
             model_name='sentence-transformers/all-MiniLM-L6-v2'
         )
         
+        # Check if vectorstore already exists
         if os.path.exists(DB_FAISS_PATH):
             return FAISS.load_local(
                 DB_FAISS_PATH, 
@@ -52,6 +53,7 @@ def build_vectorstore():
                 allow_dangerous_deserialization=True
             )
 
+        # Create new vectorstore if PDFs exist
         if os.path.exists(DATA_PATH):
             loader = DirectoryLoader(DATA_PATH, glob="*.pdf", loader_cls=PyPDFLoader)
             documents = loader.load()
@@ -66,15 +68,16 @@ def build_vectorstore():
                 db.save_local(DB_FAISS_PATH)
                 return db
         
+        # If no PDFs found, return None (will use direct AI responses)
         return None
         
     except Exception as e:
         st.error(f"❌ Error loading knowledge base: {str(e)}")
         return None
 
-# -------- Direct AI Response --------
+# -------- Direct AI Response (Fallback) --------
 def get_direct_ai_response(question):
-    """Get response directly from AI"""
+    """Get response directly from AI when no PDFs are available"""
     try:
         llm = ChatGroq(
             model_name="llama-3.1-8b-instant",
@@ -88,6 +91,11 @@ def get_direct_ai_response(question):
         
         User Question: {question}
         
+        Please provide:
+        1. Clear, factual health information
+        2. Practical advice and tips
+        3. Helpful recommendations
+        
         Provide a detailed, informative response:
         """
         
@@ -97,13 +105,156 @@ def get_direct_ai_response(question):
     except Exception as e:
         return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
+# -------- Typing effect with realistic delays --------
+def bot_typing(container, text, delay=0.02):
+    """Enhanced typing effect with realistic behavior"""
+    thinking_time = min(1.5, len(text) * 0.008)
+    time.sleep(thinking_time)
+    
+    # Show typing indicator
+    with container:
+        typing_indicator = st.empty()
+        typing_indicator.markdown(
+            """
+            <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
+                <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                            width:40px;height:40px;border-radius:12px;
+                            display:flex;align-items:center;justify-content:center;margin-right:12px;
+                            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                    <span style='color:white;font-size:18px;'>💠</span>
+                </div>
+                <div style='color:#666;background:#f8fafc;padding:12px 16px;border-radius:16px;
+                            border:1px solid #e2e8f0;font-style:italic;font-size:14px;'>
+                    HealthBot is thinking...
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        time.sleep(1.2)
+    
+    # Clear typing indicator and show actual message
+    typing_indicator.empty()
+    
+    # Type out the actual message
+    message_container = container.empty()
+    typed = ""
+    for char in text:
+        typed += char
+        message_container.markdown(
+            f"""
+            <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                            width:40px;height:40px;border-radius:12px;
+                            display:flex;align-items:center;justify-content:center;margin-right:12px;
+                            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                    <span style='color:white;font-size:18px;'>💠</span>
+                </div>
+                <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
+                            position:relative;'>
+                    <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
+                    {typed}
+                    <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{time.strftime('%H:%M')}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        time.sleep(delay * random.uniform(0.3, 0.8))
+
+# -------- Display messages with modern design --------
+def display_message(msg):
+    current_time = time.strftime('%H:%M')
+    
+    if msg["role"] == "user":
+        st.markdown(
+            f"""
+            <div style='display:flex; justify-content:flex-end; align-items:flex-start; margin-bottom:20px;'>
+                <div style='color:white;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);position:relative;'>
+                    <div style='font-weight:600;color:rgba(255,255,255,0.9);font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>You</div>
+                    {msg['content']}
+                    <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:rgba(255,255,255,0.7);'>{current_time}</div>
+                </div>
+                <div style='background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            width:40px;height:40px;border-radius:12px;
+                            display:flex;align-items:center;justify-content:center;margin-left:12px;
+                            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);'>
+                    <span style='color:white;font-size:18px;'>👤</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f"""
+            <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                            width:40px;height:40px;border-radius:12px;
+                            display:flex;align-items:center;justify-content:center;margin-right:12px;
+                            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                    <span style='color:white;font-size:18px;'>💠</span>
+                </div>
+                <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
+                            position:relative;'>
+                    <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
+                    {msg['content']}
+                    <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{current_time}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# -------- Quick reply chips --------
+def create_quick_replies():
+    quick_questions = [
+        "What are common cold symptoms?",
+        "How to improve sleep quality?",
+        "What foods boost immunity?",
+        "Exercise recommendations?",
+        "Stress management tips?",
+        "When to see a doctor for fever?"
+    ]
+    
+    st.markdown("""
+        <div style='margin:20px 0;'>
+            <div style='font-size:12px;color:#718096;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px;'>Quick Questions</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    cols = st.columns(2)
+    for i, question in enumerate(quick_questions):
+        with cols[i % 2]:
+            if st.button(
+                question, 
+                key=f"quick_{i}", 
+                use_container_width=True,
+                type="secondary"
+            ):
+                st.session_state.quick_question = question
+                st.rerun()
+
+# -------- Clear chat function --------
+def clear_chat():
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
+    ]
+
 # -------- Get AI Response --------
 def get_ai_response(question):
-    """Get response from AI"""
+    """Get response from AI - tries PDF knowledge base first, falls back to direct AI"""
     try:
+        # Try to use PDF knowledge base
         vectorstore = build_vectorstore()
         
         if vectorstore:
+            # Create QA chain with PDF knowledge
             qa_chain = RetrievalQA.from_chain_type(
                 llm=ChatGroq(
                     model_name="llama-3.1-8b-instant",
@@ -120,563 +271,247 @@ def get_ai_response(question):
             result = qa_chain.invoke({"query": question})
             return result["result"]
         else:
+            # Fallback to direct AI response
             return get_direct_ai_response(question)
             
     except Exception as e:
+        # Final fallback if everything fails
         return get_direct_ai_response(question)
 
-# -------- MODERN UI COMPONENTS --------
-def display_modern_message(msg):
-    """Modern message display with animations"""
-    if msg["role"] == "user":
-        st.markdown(
-            f"""
-            <div style='
-                display: flex;
-                justify-content: flex-end;
-                margin: 20px 0;
-                animation: slideInRight 0.5s ease-out;
-            '>
-                <div style='
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 16px 22px;
-                    border-radius: 22px 22px 6px 22px;
-                    max-width: 75%;
-                    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-                    border: 1px solid rgba(255,255,255,0.3);
-                    backdrop-filter: blur(10px);
-                    position: relative;
-                '>
-                    <div style='font-size: 11px; opacity: 0.8; margin-bottom: 6px; display: flex; align-items: center; gap: 5px;'>
-                        <span>👤</span> You
-                    </div>
-                    <div style='font-size: 15px; line-height: 1.5;'>
-                        {msg['content']}
-                    </div>
-                    <div style='
-                        position: absolute;
-                        bottom: -8px;
-                        right: 10px;
-                        width: 0;
-                        height: 0;
-                        border-left: 10px solid transparent;
-                        border-right: 10px solid transparent;
-                        border-top: 10px solid #764ba2;
-                    '></div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f"""
-            <div style='
-                display: flex;
-                align-items: start;
-                margin: 20px 0;
-                animation: slideInLeft 0.5s ease-out;
-            '>
-                <div style='
-                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                    color: white;
-                    padding: 16px 22px;
-                    border-radius: 22px 22px 22px 6px;
-                    max-width: 75%;
-                    box-shadow: 0 8px 25px rgba(240, 147, 251, 0.4);
-                    border: 1px solid rgba(255,255,255,0.3);
-                    backdrop-filter: blur(10px);
-                    position: relative;
-                '>
-                    <div style='font-size: 11px; opacity: 0.8; margin-bottom: 6px; display: flex; align-items: center; gap: 5px;'>
-                        <span>⚕️</span> HealthBot Pro
-                    </div>
-                    <div style='font-size: 15px; line-height: 1.5;'>
-                        {msg['content']}
-                    </div>
-                    <div style='
-                        position: absolute;
-                        bottom: -8px;
-                        left: 10px;
-                        width: 0;
-                        height: 0;
-                        border-left: 10px solid transparent;
-                        border-right: 10px solid transparent;
-                        border-top: 10px solid #f5576c;
-                    '></div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-def create_modern_health_topics():
-    """Modern health topics grid"""
-    topics = [
-        {"icon": "🤒", "title": "Symptoms Check", "desc": "Understand your symptoms", "color": "#FF6B6B"},
-        {"icon": "💊", "title": "Medications", "desc": "Drug information & side effects", "color": "#4ECDC4"},
-        {"icon": "🏃", "title": "Fitness", "desc": "Exercise & workout plans", "color": "#45B7D1"},
-        {"icon": "🥗", "title": "Nutrition", "desc": "Diet & healthy eating", "color": "#96CEB4"},
-        {"icon": "😴", "title": "Sleep", "desc": "Sleep quality improvement", "color": "#FECA57"},
-        {"icon": "🧘", "title": "Mental Health", "desc": "Stress & anxiety management", "color": "#FF9FF3"}
-    ]
-    
-    st.markdown("""
-        <div style='
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 20px;
-            margin: 25px 0;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-        '>
-            <h2 style='margin: 0; font-size: 1.8rem;'>🌟 Quick Health Topics</h2>
-            <p style='margin: 5px 0 0 0; opacity: 0.9;'>Click any topic to get started</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    cols = st.columns(3)
-    for i, topic in enumerate(topics):
-        with cols[i % 3]:
-            if st.button(
-                f"{topic['icon']} {topic['title']}",
-                key=f"topic_{i}",
-                help=topic['desc'],
-                use_container_width=True,
-                type="secondary"
-            ):
-                st.session_state.quick_question = f"Tell me about {topic['title'].lower()} and best practices"
-                st.rerun()
-
-def show_modern_typing_animation():
-    """Modern typing animation"""
-    with st.empty():
-        st.markdown(
-            """
-            <div style='
-                display: flex;
-                align-items: center;
-                padding: 20px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 20px;
-                margin: 15px 0;
-                animation: pulse 2s infinite;
-                box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-                color: white;
-            '>
-                <div style='
-                    width: 50px;
-                    height: 50px;
-                    background: rgba(255,255,255,0.2);
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    margin-right: 20px;
-                    backdrop-filter: blur(10px);
-                '>
-                    <span style='font-size: 20px;'>⚕️</span>
-                </div>
-                <div style='flex: 1;'>
-                    <div style='font-weight: 600; margin-bottom: 8px; font-size: 16px;'>HealthBot Pro is analyzing</div>
-                    <div style='display: flex; gap: 6px;'>
-                        <div style='width: 10px; height: 10px; background: white; border-radius: 50%; animation: bounce 1.4s infinite;'></div>
-                        <div style='width: 10px; height: 10px; background: white; border-radius: 50%; animation: bounce 1.4s infinite 0.2s;'></div>
-                        <div style='width: 10px; height: 10px; background: white; border-radius: 50%; animation: bounce 1.4s infinite 0.4s;'></div>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        time.sleep(1.5)
-
-def create_modern_emergency_section():
-    """Modern emergency contact section"""
-    st.markdown("""
-        <div style='
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 20px;
-            margin: 20px 0;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
-        '>
-            <h3 style='margin: 0 0 15px 0; font-size: 1.4rem;'>🚨 Emergency Contacts</h3>
-            <div style='display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px;'>
-                <div>
-                    <div style='font-weight: 600;'>Medical Emergency</div>
-                    <div style='font-size: 1.2rem;'>📞 108</div>
-                </div>
-                <div>
-                    <div style='font-weight: 600;'>Police</div>
-                    <div style='font-size: 1.2rem;'>📞 100</div>
-                </div>
-                <div>
-                    <div style='font-weight: 600;'>Fire Service</div>
-                    <div style='font-size: 1.2rem;'>📞 101</div>
-                </div>
-            </div>
-            <p style='margin: 15px 0 0 0; opacity: 0.9; font-size: 12px;'>
-                In case of emergency, contact these numbers immediately
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-
-def create_health_tools():
-    """Interactive health tools"""
-    with st.expander("🛠️ Health Tools", expanded=False):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📊 BMI Calculator")
-            weight = st.number_input("Weight (kg)", min_value=1.0, value=65.0, key="weight")
-            height = st.number_input("Height (m)", min_value=0.1, value=1.7, key="height")
-            if st.button("Calculate BMI", key="bmi_calc"):
-                bmi = weight / (height ** 2)
-                st.metric("Your BMI", f"{bmi:.1f}")
-                if bmi < 18.5:
-                    st.warning("Underweight - Consider consulting a nutritionist")
-                elif bmi < 25:
-                    st.success("Normal weight - Keep it up!")
-                elif bmi < 30:
-                    st.warning("Overweight - Consider lifestyle changes")
-                else:
-                    st.error("Obese - Please consult a healthcare provider")
-        
-        with col2:
-            st.subheader("💧 Water Intake")
-            weight_kg = st.number_input("Your Weight (kg)", min_value=1.0, value=65.0, key="water_weight")
-            activity = st.selectbox("Activity Level", ["Sedentary", "Light", "Moderate", "Heavy"])
-            if st.button("Calculate Water Need", key="water_calc"):
-                base_water = weight_kg * 0.033
-                activity_multiplier = {"Sedentary": 1.0, "Light": 1.2, "Moderate": 1.5, "Heavy": 2.0}
-                total_water = base_water * activity_multiplier[activity]
-                st.metric("Daily Water Need", f"{total_water:.1f} Liters")
-
-# -------- MAIN APP --------
+# -------- Main App --------
 def main():
     st.set_page_config(
-        page_title="HealthBot Pro - Advanced AI Health Assistant",
-        page_icon="⚕️",
+        page_title="Health Assistant",
+        page_icon="💠",
         layout="wide",
         initial_sidebar_state="expanded"
     )
 
-    # Modern CSS with animations
+    # Modern CSS styling
     st.markdown("""
         <style>
-        @keyframes slideInRight {
-            from { opacity: 0; transform: translateX(30px); }
-            to { opacity: 1; transform: translateX(0); }
+        /* Main background */
+        .stApp {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         }
         
-        @keyframes slideInLeft {
-            from { opacity: 0; transform: translateX(-30px); }
-            to { opacity: 1; transform: translateX(0); }
+        /* Sidebar styling */
+        .css-1d391kg, .css-1lcbmhc {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border-right: 1px solid #e2e8f0;
         }
         
-        @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
-            40% { transform: scale(1.2); opacity: 1; }
+        /* Input field styling */
+        .stTextInput>div>div>input {
+            border-radius: 16px;
+            padding: 14px 20px;
+            font-size: 14px;
+            border: 1.5px solid #e2e8f0;
+            background: #ffffff;
+            transition: all 0.3s ease;
+        }
+        .stTextInput>div>div>input:focus {
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.1);
         }
         
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3); }
-            50% { transform: scale(1.02); box-shadow: 0 12px 35px rgba(102, 126, 234, 0.5); }
-            100% { transform: scale(1); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3); }
-        }
-        
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        
-        .main-header {
-            font-size: 3.5rem;
-            background: linear-gradient(45deg, #FF6B6B, #667eea, #764ba2, #f093fb);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: gradientShift 3s ease infinite;
-            text-align: center;
-            margin-bottom: 1rem;
-            font-weight: 800;
-        }
-        
-        .sub-header {
-            text-align: center;
-            color: #666;
-            font-size: 1.3rem;
-            margin-bottom: 2rem;
-            font-weight: 300;
-        }
-        
-        .status-card {
+        /* Button styling */
+        .stButton>button {
+            border-radius: 16px;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 25px;
-            border-radius: 20px;
-            margin: 15px 0;
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        
-        .feature-card {
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            padding: 20px;
-            border-radius: 15px;
-            margin: 10px 0;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            border-left: 5px solid #667eea;
             transition: all 0.3s ease;
         }
-        
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-        }
-        
-        .stTextInput>div>div>input {
-            border-radius: 25px;
-            padding: 18px 25px;
-            font-size: 16px;
-            border: 2px solid #e0e0e0;
-            background: #f8f9fa;
-            transition: all 0.3s ease;
-        }
-        
-        .stTextInput>div>div>input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-            background: white;
-        }
-        
-        .stButton>button {
-            border-radius: 25px;
-            padding: 15px 30px;
-            font-weight: 600;
-            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
-            color: white;
-            border: none;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-        }
-        
         .stButton>button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
+        
+        /* Secondary buttons */
+        .stButton>button[kind="secondary"] {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #4a5568;
+            border: 1.5px solid #e2e8f0;
+        }
+        .stButton>button[kind="secondary"]:hover {
+            border-color: #3a7bd5;
+            color: #3a7bd5;
+        }
+        
+        /* Chat container */
+        .main .block-container {
+            padding-top: 2rem;
+        }
+        
+        /* Hide default Streamlit elements */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         
         /* Custom scrollbar */
         ::-webkit-scrollbar {
-            width: 8px;
+            width: 6px;
         }
-        
         ::-webkit-scrollbar-track {
             background: #f1f1f1;
             border-radius: 10px;
         }
-        
         ::-webkit-scrollbar-thumb {
-            background: linear-gradient(45deg, #667eea, #764ba2);
+            background: #c1c1c1;
             border-radius: 10px;
         }
-        
         ::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(45deg, #764ba2, #667eea);
+            background: #a8a8a8;
         }
-        
-        /* Hide Streamlit branding */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
     # Initialize session state
     if 'messages' not in st.session_state:
         st.session_state.messages = [
-            {
-                "role": "assistant", 
-                "content": """👋 **Welcome to HealthBot Pro!** 
-
-I'm your advanced AI health assistant, here to provide you with:
-
-🔬 **Accurate Health Information**
-💊 **Medication Guidance** 
-🏃 **Fitness & Nutrition Advice**
-😴 **Sleep & Mental Health Support**
-📊 **Symptom Analysis**
-
-**How can I assist you with your health today?**"""
-            }
+            {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
         ]
 
-    # Modern Sidebar
+    # Sidebar with modern design
     with st.sidebar:
-        # Premium Header
         st.markdown("""
-            <div style='
-                background: linear-gradient(135deg, #FF6B6B 0%, #f093fb 50%, #667eea 100%);
-                color: white;
-                padding: 30px 20px;
-                border-radius: 20px;
-                text-align: center;
-                margin-bottom: 30px;
-                box-shadow: 0 15px 35px rgba(255, 107, 107, 0.4);
-            '>
-                <div style='font-size: 3rem; margin-bottom: 10px;'>⚕️</div>
-                <h1 style='margin: 0; font-size: 1.8rem; font-weight: 800;'>HealthBot Pro</h1>
-                <p style='margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;'>Advanced AI Health Assistant</p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # System Status
-        vectorstore = build_vectorstore()
-        status_icon = "🔮" if vectorstore else "⚡"
-        status_text = "**Enhanced Mode** with Medical Database" if vectorstore else "**Basic Mode** - General AI Knowledge"
-        st.markdown(f"""
-            <div class='status-card'>
-                <div style='display: flex; align-items: center; gap: 10px; margin-bottom: 10px;'>
-                    <div style='font-size: 1.5rem;'>{status_icon}</div>
-                    <div style='font-size: 14px; opacity: 0.9;'>System Status</div>
+            <div style='text-align: center; margin-bottom: 2rem; padding: 1rem;'>
+                <div style='background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); 
+                            padding: 2rem; border-radius: 20px; margin-bottom: 1rem;'>
+                    <h1 style='color: white; font-size: 1.8rem; margin: 0;'>💠</h1>
+                    <h2 style='color: white; font-size: 1.2rem; margin: 0.5rem 0 0 0;'>Health Assistant</h2>
                 </div>
-                <div style='font-size: 16px; font-weight: 600;'>{status_text}</div>
             </div>
         """, unsafe_allow_html=True)
         
-        # Enhanced Statistics
-        st.markdown("### 📊 Chat Analytics")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Messages", len(st.session_state.messages), delta="+1")
-        with col2:
-            st.metric("Status", "🟢 Active")
+        # Stats card
+        st.markdown(f"""
+            <div style='background: white; padding: 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; 
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <span style='color: #718096; font-size: 14px;'>Messages</span>
+                    <span style='color: #3a7bd5; font-weight: 700; font-size: 18px;'>{len(st.session_state.messages)}</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Health Tools
-        create_health_tools()
+        st.markdown("### Features")
+        features = [
+            ("🤖", "AI Health Guidance"),
+            ("📚", "Medical Knowledge"),
+            ("🔒", "Private & Secure"),
+            ("⚡", "Instant Responses")
+        ]
         
-        # Emergency Section
-        create_modern_emergency_section()
+        for icon, text in features:
+            st.markdown(f"""
+                <div style='display: flex; align-items: center; padding: 0.5rem 0; color: #4a5568;'>
+                    <span style='font-size: 1.2rem; margin-right: 0.75rem;'>{icon}</span>
+                    <span style='font-size: 14px;'>{text}</span>
+                </div>
+            """, unsafe_allow_html=True)
         
-        # Clear Chat
         st.markdown("---")
-        if st.button("🗑️ Clear Conversation", use_container_width=True, type="secondary"):
-            st.session_state.messages = [
-                {"role": "assistant", "content": "🗣️ Conversation cleared! I'm ready to help with your health questions."}
-            ]
+        
+        if st.button("🔄 Clear Conversation", use_container_width=True, type="secondary"):
+            clear_chat()
             st.rerun()
 
-    # Main Content Area
+    # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Premium Header
-        st.markdown('<h1 class="main-header">HealthBot Pro</h1>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-header">Your Intelligent AI Health Companion</p>', unsafe_allow_html=True)
+        # Header
+        st.markdown("""
+            <div style='text-align: center; margin-bottom: 2rem;'>
+                <h1 style='color: #2d3748; font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem;'>
+                    Health Assistant
+                </h1>
+                <p style='color: #718096; font-size: 1rem; margin: 0;'>
+                    Your AI-powered health companion
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Health Topics Grid
-        create_modern_health_topics()
-        
-        st.markdown("---")
-        
-        # Enhanced Chat Container
+        # Status indicator
+        st.markdown("""
+            <div style='background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); 
+                        padding: 1rem; border-radius: 16px; margin-bottom: 2rem; text-align: center;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
+                <div style='color: #2d3748; font-weight: 600; font-size: 14px;'>
+                    ✅ System Ready • AI Assistant Online
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Chat container
         chat_container = st.container()
         with chat_container:
             for msg in st.session_state.messages:
-                display_modern_message(msg)
-        
-        # Premium Input Area
-        st.markdown("""
-            <div style='
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                padding: 25px;
-                border-radius: 25px;
-                margin-top: 25px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-                border: 1px solid rgba(255,255,255,0.5);
-                backdrop-filter: blur(10px);
-            '>
-        """, unsafe_allow_html=True)
+                display_message(msg)
+
+        # Quick replies for new chats
+        if len(st.session_state.messages) <= 1:
+            create_quick_replies()
+
+        # Input area
+        st.markdown("---")
         
         # Handle quick questions
         current_input_value = ""
         if hasattr(st.session_state, 'quick_question'):
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
-        
-        # Premium Input Form
+
+        # Input form
         with st.form("chat_form", clear_on_submit=True):
-            col_input, col_send = st.columns([5, 1])
+            col_input, col_send = st.columns([4, 1])
             
             with col_input:
                 user_input = st.text_input(
-                    "💭 Ask your health question...",
+                    "Type your health question...",
                     value=current_input_value,
-                    placeholder="Describe symptoms, ask about medications, nutrition, exercise, or mental health...",
+                    placeholder="Ask about symptoms, treatments, or health tips...",
                     key="user_input",
                     label_visibility="collapsed"
                 )
             
             with col_send:
-                submitted = st.form_submit_button(
-                    "Send 🚀", 
-                    use_container_width=True,
-                    type="primary"
-                )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Disclaimer
-        st.markdown("""
-            <div style='
-                background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-                color: #856404;
-                padding: 15px;
-                border-radius: 15px;
-                margin-top: 20px;
-                text-align: center;
-                font-size: 12px;
-                border-left: 4px solid #ffc107;
-            '>
-                ⚠️ <strong>Disclaimer:</strong> This AI assistant provides health information for educational purposes only. 
-                Always consult healthcare professionals for medical advice and emergencies.
-            </div>
-        """, unsafe_allow_html=True)
-        
+                submitted = st.form_submit_button("Send", use_container_width=True)
+
         # Process input
         if submitted and user_input:
             # Add user message
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Show user message immediately
-            st.rerun()
-            
-            # Show enhanced typing animation
-            show_modern_typing_animation()
-            
-            # Generate AI response
-            try:
-                answer = get_ai_response(user_input)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-            except Exception as e:
-                error_msg = f"""❌ **I apologize for the inconvenience**
+            # Process AI response
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                user_message = st.session_state.messages[-1]["content"]
+                
+                # Generate and display AI response with typing effect
+                bot_container = st.empty()
+                try:
+                    answer = get_ai_response(user_message)
+                    bot_typing(bot_container, answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                    
+                except Exception as e:
+                    error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-I'm currently experiencing technical difficulties. Please:
-
-1. **Check your internet connection**
-2. **Try again in a moment**
-3. **Contact support if the issue persists**
-
-*Error details: {str(e)}*"""
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-            
-            st.rerun()
+                # Auto-scroll
+                st.markdown(
+                    """
+                    <script>
+                        window.scrollTo(0, document.body.scrollHeight);
+                    </script>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 if __name__ == "__main__":
     main()
