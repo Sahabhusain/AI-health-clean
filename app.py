@@ -10,7 +10,6 @@ from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import random
 from dotenv import load_dotenv
-import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -126,9 +125,9 @@ def get_ai_response(question):
     except Exception as e:
         return get_direct_ai_response(question)
 
-# -------- ENHANCED UI COMPONENTS --------
-def display_message(msg):
-    """Enhanced modern message display with animations"""
+# -------- MODERN UI COMPONENTS --------
+def display_modern_message(msg):
+    """Modern message display with animations"""
     if msg["role"] == "user":
         st.markdown(
             f"""
@@ -212,8 +211,8 @@ def display_message(msg):
             unsafe_allow_html=True
         )
 
-def create_health_topics():
-    """Enhanced health topics with better design"""
+def create_modern_health_topics():
+    """Modern health topics grid"""
     topics = [
         {"icon": "🤒", "title": "Symptoms Check", "desc": "Understand your symptoms", "color": "#FF6B6B"},
         {"icon": "💊", "title": "Medications", "desc": "Drug information & side effects", "color": "#4ECDC4"},
@@ -227,7 +226,7 @@ def create_health_topics():
         <div style='
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px;
+            padding: 25px;
             border-radius: 20px;
             margin: 25px 0;
             text-align: center;
@@ -241,32 +240,18 @@ def create_health_topics():
     cols = st.columns(3)
     for i, topic in enumerate(topics):
         with cols[i % 3]:
-            st.markdown(f"""
-                <div style='
-                    background: linear-gradient(135deg, {topic['color']}33, {topic['color']}66);
-                    border: 2px solid {topic['color']};
-                    border-radius: 15px;
-                    padding: 20px;
-                    text-align: center;
-                    margin: 8px 0;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    box-shadow: 0 4px 15px {topic['color']}33;
-                ' 
-                onclick="this.style.transform='scale(0.95)'; setTimeout(()=>this.style.transform='scale(1)', 150)"
-                >
-                    <div style='font-size: 2rem; margin-bottom: 10px;'>{topic['icon']}</div>
-                    <div style='font-weight: 600; color: {topic['color']}; font-size: 14px;'>{topic['title']}</div>
-                    <div style='font-size: 11px; color: #666; margin-top: 5px;'>{topic['desc']}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button(f"Select {topic['title']}", key=f"topic_{i}", use_container_width=True):
+            if st.button(
+                f"{topic['icon']} {topic['title']}",
+                key=f"topic_{i}",
+                help=topic['desc'],
+                use_container_width=True,
+                type="secondary"
+            ):
                 st.session_state.quick_question = f"Tell me about {topic['title'].lower()} and best practices"
                 st.rerun()
 
-def show_typing_animation():
-    """Enhanced typing animation"""
+def show_modern_typing_animation():
+    """Modern typing animation"""
     with st.empty():
         st.markdown(
             """
@@ -308,8 +293,8 @@ def show_typing_animation():
         )
         time.sleep(1.5)
 
-def create_emergency_section():
-    """Emergency contact section"""
+def create_modern_emergency_section():
+    """Modern emergency contact section"""
     st.markdown("""
         <div style='
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
@@ -341,6 +326,37 @@ def create_emergency_section():
         </div>
     """, unsafe_allow_html=True)
 
+def create_health_tools():
+    """Interactive health tools"""
+    with st.expander("🛠️ Health Tools", expanded=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📊 BMI Calculator")
+            weight = st.number_input("Weight (kg)", min_value=1.0, value=65.0, key="weight")
+            height = st.number_input("Height (m)", min_value=0.1, value=1.7, key="height")
+            if st.button("Calculate BMI", key="bmi_calc"):
+                bmi = weight / (height ** 2)
+                st.metric("Your BMI", f"{bmi:.1f}")
+                if bmi < 18.5:
+                    st.warning("Underweight - Consider consulting a nutritionist")
+                elif bmi < 25:
+                    st.success("Normal weight - Keep it up!")
+                elif bmi < 30:
+                    st.warning("Overweight - Consider lifestyle changes")
+                else:
+                    st.error("Obese - Please consult a healthcare provider")
+        
+        with col2:
+            st.subheader("💧 Water Intake")
+            weight_kg = st.number_input("Your Weight (kg)", min_value=1.0, value=65.0, key="water_weight")
+            activity = st.selectbox("Activity Level", ["Sedentary", "Light", "Moderate", "Heavy"])
+            if st.button("Calculate Water Need", key="water_calc"):
+                base_water = weight_kg * 0.033
+                activity_multiplier = {"Sedentary": 1.0, "Light": 1.2, "Moderate": 1.5, "Heavy": 2.0}
+                total_water = base_water * activity_multiplier[activity]
+                st.metric("Daily Water Need", f"{total_water:.1f} Liters")
+
 # -------- MAIN APP --------
 def main():
     st.set_page_config(
@@ -350,7 +366,7 @@ def main():
         initial_sidebar_state="expanded"
     )
 
-    # Enhanced CSS with modern animations
+    # Modern CSS with animations
     st.markdown("""
         <style>
         @keyframes slideInRight {
@@ -374,9 +390,10 @@ def main():
             100% { transform: scale(1); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3); }
         }
         
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
         
         .main-header {
@@ -389,13 +406,6 @@ def main():
             text-align: center;
             margin-bottom: 1rem;
             font-weight: 800;
-            text-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
         }
         
         .sub-header {
@@ -462,11 +472,6 @@ def main():
             box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
         }
         
-        .sidebar .sidebar-content {
-            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -485,6 +490,11 @@ def main():
         ::-webkit-scrollbar-thumb:hover {
             background: linear-gradient(45deg, #764ba2, #667eea);
         }
+        
+        /* Hide Streamlit branding */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -507,7 +517,7 @@ I'm your advanced AI health assistant, here to provide you with:
             }
         ]
 
-    # Enhanced Sidebar
+    # Modern Sidebar
     with st.sidebar:
         # Premium Header
         st.markdown("""
@@ -519,7 +529,6 @@ I'm your advanced AI health assistant, here to provide you with:
                 text-align: center;
                 margin-bottom: 30px;
                 box-shadow: 0 15px 35px rgba(255, 107, 107, 0.4);
-                animation: float 6s ease-in-out infinite;
             '>
                 <div style='font-size: 3rem; margin-bottom: 10px;'>⚕️</div>
                 <h1 style='margin: 0; font-size: 1.8rem; font-weight: 800;'>HealthBot Pro</h1>
@@ -549,29 +558,11 @@ I'm your advanced AI health assistant, here to provide you with:
         with col2:
             st.metric("Status", "🟢 Active")
         
-        # Premium Features
-        st.markdown("### 🚀 Premium Features")
-        features = [
-            {"icon": "🤖", "text": "AI-Powered Health Advice", "color": "#FF6B6B"},
-            {"icon": "📚", "text": "Medical Knowledge Base", "color": "#4ECDC4"},
-            {"icon": "💊", "text": "Medication Information", "color": "#45B7D1"},
-            {"icon": "🏃", "text": "Fitness Guidance", "color": "#96CEB4"},
-            {"icon": "🥗", "text": "Nutrition Plans", "color": "#FECA57"},
-            {"icon": "😴", "text": "Sleep Analysis", "color": "#FF9FF3"}
-        ]
-        
-        for feature in features:
-            st.markdown(f"""
-                <div class='feature-card'>
-                    <div style='display: flex; align-items: center; gap: 10px;'>
-                        <span style='font-size: 1.2rem;'>{feature['icon']}</span>
-                        <span style='color: {feature['color']}; font-weight: 600;'>{feature['text']}</span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        # Health Tools
+        create_health_tools()
         
         # Emergency Section
-        create_emergency_section()
+        create_modern_emergency_section()
         
         # Clear Chat
         st.markdown("---")
@@ -590,7 +581,7 @@ I'm your advanced AI health assistant, here to provide you with:
         st.markdown('<p class="sub-header">Your Intelligent AI Health Companion</p>', unsafe_allow_html=True)
         
         # Health Topics Grid
-        create_health_topics()
+        create_modern_health_topics()
         
         st.markdown("---")
         
@@ -598,7 +589,7 @@ I'm your advanced AI health assistant, here to provide you with:
         chat_container = st.container()
         with chat_container:
             for msg in st.session_state.messages:
-                display_message(msg)
+                display_modern_message(msg)
         
         # Premium Input Area
         st.markdown("""
@@ -667,7 +658,7 @@ I'm your advanced AI health assistant, here to provide you with:
             st.rerun()
             
             # Show enhanced typing animation
-            show_typing_animation()
+            show_modern_typing_animation()
             
             # Generate AI response
             try:
