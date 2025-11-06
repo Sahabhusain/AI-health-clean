@@ -448,7 +448,7 @@ def main():
             </div>
         """, unsafe_allow_html=True)
 
-        # Chat container
+        # Chat container - FIXED: This will display above the input
         chat_container = st.container()
         with chat_container:
             for msg in st.session_state.messages:
@@ -458,7 +458,7 @@ def main():
         if len(st.session_state.messages) <= 1:
             create_quick_replies()
 
-        # Input area
+        # Input area - FIXED: This stays at the bottom
         st.markdown("---")
         
         # Handle quick questions
@@ -467,8 +467,9 @@ def main():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Input form
-        with st.form("chat_form", clear_on_submit=True):
+        # Input form - FIXED: Using a different approach
+        input_container = st.container()
+        with input_container:
             col_input, col_send = st.columns([4, 1])
             
             with col_input:
@@ -481,37 +482,34 @@ def main():
                 )
             
             with col_send:
-                submitted = st.form_submit_button("Send", use_container_width=True)
+                send_button = st.button("Send", use_container_width=True)
 
-        # Process input
-        if submitted and user_input:
-            # Add user message
+        # Process input when send button is clicked
+        if send_button and user_input:
+            # Add user message to chat
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Process AI response
-            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-                user_message = st.session_state.messages[-1]["content"]
-                
-                # Generate and display AI response with typing effect
-                bot_container = st.empty()
+            # Generate AI response
+            with st.spinner(""):
                 try:
-                    answer = get_ai_response(user_message)
-                    bot_typing(bot_container, answer)
+                    answer = get_ai_response(user_input)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
-                    
                 except Exception as e:
                     error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            
+            # Rerun to update the chat display
+            st.rerun()
 
-                # Auto-scroll
-                st.markdown(
-                    """
-                    <script>
-                        window.scrollTo(0, document.body.scrollHeight);
-                    </script>
-                    """,
-                    unsafe_allow_html=True
-                )
+        # Auto-scroll to bottom after rerun
+        st.markdown(
+            """
+            <script>
+                window.scrollTo(0, document.body.scrollHeight);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
 
 if __name__ == "__main__":
     main()
