@@ -105,64 +105,164 @@ def get_direct_ai_response(question):
     except Exception as e:
         return f"I apologize, but I'm experiencing technical difficulties. Please try again later. Error: {str(e)}"
 
-# -------- Typing effect with realistic delays --------
-def bot_typing(container, text, delay=0.02):
-    """Enhanced typing effect with realistic behavior"""
-    thinking_time = min(1.5, len(text) * 0.008)
-    time.sleep(thinking_time)
+# -------- Enhanced Realistic Typing Effect --------
+def realistic_typing_effect(container, text, message_index):
+    """Realistic typing effect with human-like variations"""
     
-    # Show typing indicator
+    # Calculate thinking time based on text complexity
+    thinking_time = min(2.0, max(1.0, len(text) * 0.01))
+    
+    # Show realistic typing indicator
     with container:
-        typing_indicator = st.empty()
-        typing_indicator.markdown(
-            """
-            <div style='display:flex; align-items:flex-start; margin-bottom:12px;'>
-                <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
-                            width:40px;height:40px;border-radius:12px;
-                            display:flex;align-items:center;justify-content:center;margin-right:12px;
-                            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
-                    <span style='color:white;font-size:18px;'>💠</span>
-                </div>
-                <div style='color:#666;background:#f8fafc;padding:12px 16px;border-radius:16px;
-                            border:1px solid #e2e8f0;font-style:italic;font-size:14px;'>
-                    HealthBot is thinking...
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        typing_container = st.empty()
         
-        time.sleep(1.2)
-    
-    # Clear typing indicator and show actual message
-    typing_indicator.empty()
-    
-    # Type out the actual message
-    message_container = container.empty()
-    typed = ""
-    for char in text:
-        typed += char
-        message_container.markdown(
-            f"""
-            <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
-                <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
-                            width:40px;height:40px;border-radius:12px;
-                            display:flex;align-items:center;justify-content:center;margin-right:12px;
-                            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
-                    <span style='color:white;font-size:18px;'>💠</span>
+        # Animated typing indicator with dots
+        typing_stages = [
+            "HealthBot is thinking ●○○",
+            "HealthBot is thinking ○●○", 
+            "HealthBot is thinking ○○●",
+            "HealthBot is thinking ●●●"
+        ]
+        
+        # Show thinking animation
+        for i in range(3):
+            for stage in typing_stages:
+                typing_container.markdown(
+                    f"""
+                    <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                        <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                                    width:40px;height:40px;border-radius:12px;
+                                    display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                    box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                            <span style='color:white;font-size:18px;'>💠</span>
+                        </div>
+                        <div style='color:#666;background:#f8fafc;padding:12px 16px;border-radius:16px;
+                                    border:1px solid #e2e8f0;font-style:italic;font-size:14px;'>
+                            {stage}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                time.sleep(0.3)
+        
+        time.sleep(thinking_time)
+        
+        # Clear typing indicator
+        typing_container.empty()
+        
+        # Start typing the actual message
+        message_container = st.empty()
+        typed_text = ""
+        
+        # Human-like typing patterns
+        typing_speed_variations = [
+            0.02, 0.03, 0.015, 0.025, 0.02, 0.035, 0.018, 0.028
+        ]
+        
+        # Simulate realistic typing with occasional pauses
+        words = text.split(' ')
+        current_sentence = ""
+        
+        for i, word in enumerate(words):
+            # Add word with space
+            current_sentence += word + " "
+            typed_text = current_sentence
+            
+            # Update message display
+            message_container.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                    <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                                width:40px;height:40px;border-radius:12px;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                        <span style='color:white;font-size:18px;'>💠</span>
+                    </div>
+                    <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                                box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
+                                position:relative;'>
+                        <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
+                        {typed_text}
+                        <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{time.strftime('%H:%M')}</div>
+                    </div>
                 </div>
-                <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
-                            position:relative;'>
-                    <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
-                    {typed}
-                    <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{time.strftime('%H:%M')}</div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            # Variable typing speed
+            base_speed = random.choice(typing_speed_variations)
+            
+            # Occasionally pause at sentence ends or commas
+            if word.endswith(('.', '!', '?', ',')) or random.random() < 0.1:
+                pause_time = random.uniform(0.1, 0.3)
+                time.sleep(pause_time)
+            
+            # Speed variations for different word lengths
+            if len(word) > 8:
+                time.sleep(base_speed * 1.5)
+            elif len(word) < 3:
+                time.sleep(base_speed * 0.7)
+            else:
+                time.sleep(base_speed)
+        
+        # Final message with cursor blink effect
+        for _ in range(2):
+            # Show with cursor
+            message_container.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                    <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                                width:40px;height:40px;border-radius:12px;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                        <span style='color:white;font-size:18px;'>💠</span>
+                    </div>
+                    <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                                box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
+                                position:relative;'>
+                        <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
+                        {typed_text}<span style='animation: blink 1s infinite;'>|</span>
+                        <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{time.strftime('%H:%M')}</div>
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        time.sleep(delay * random.uniform(0.3, 0.8))
+                <style>
+                @keyframes blink {{
+                    0% {{ opacity: 1; }}
+                    50% {{ opacity: 0; }}
+                    100% {{ opacity: 1; }}
+                }}
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+            time.sleep(0.3)
+            
+            # Show without cursor
+            message_container.markdown(
+                f"""
+                <div style='display:flex; align-items:flex-start; margin-bottom:20px;'>
+                    <div style='background:linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+                                width:40px;height:40px;border-radius:12px;
+                                display:flex;align-items:center;justify-content:center;margin-right:12px;
+                                box-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);'>
+                        <span style='color:white;font-size:18px;'>💠</span>
+                    </div>
+                    <div style='color:#2d3748;background:#ffffff;padding:16px 20px;border-radius:18px;max-width:80%;line-height:1.5;font-size:14px;
+                                box-shadow: 0 2px 10px rgba(0,0,0,0.08);border:1px solid #e2e8f0;
+                                position:relative;'>
+                        <div style='font-weight:600;color:#3a7bd5;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;'>Health Assistant</div>
+                        {typed_text}
+                        <div style='position:absolute;bottom:8px;right:12px;font-size:10px;color:#a0aec0;'>{time.strftime('%H:%M')}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            time.sleep(0.2)
+        
+        return typed_text
 
 # -------- Display messages with modern design --------
 def display_message(msg):
@@ -367,6 +467,13 @@ def main():
         ::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
+        
+        /* Blinking cursor animation */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -375,6 +482,9 @@ def main():
         st.session_state.messages = [
             {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
         ]
+    
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
 
     # Sidebar with modern design
     with st.sidebar:
@@ -448,17 +558,27 @@ def main():
             </div>
         """, unsafe_allow_html=True)
 
-        # Chat container - FIXED: This will display above the input
+        # Chat container
         chat_container = st.container()
         with chat_container:
-            for msg in st.session_state.messages:
-                display_message(msg)
+            # Display all existing messages
+            for i, msg in enumerate(st.session_state.messages):
+                if i == len(st.session_state.messages) - 1 and msg["role"] == "assistant" and st.session_state.processing:
+                    # This will be handled by the typing effect
+                    pass
+                else:
+                    display_message(msg)
+            
+            # Show typing effect for the last message if processing
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user" and st.session_state.processing:
+                typing_container = st.empty()
+                # The typing effect will be shown when we generate the response
 
         # Quick replies for new chats
-        if len(st.session_state.messages) <= 1:
+        if len(st.session_state.messages) <= 1 and not st.session_state.processing:
             create_quick_replies()
 
-        # Input area - FIXED: This stays at the bottom
+        # Input area
         st.markdown("---")
         
         # Handle quick questions
@@ -467,7 +587,7 @@ def main():
             current_input_value = st.session_state.quick_question
             del st.session_state.quick_question
 
-        # Input form - FIXED: Using a different approach
+        # Input form
         input_container = st.container()
         with input_container:
             col_input, col_send = st.columns([4, 1])
@@ -478,30 +598,50 @@ def main():
                     value=current_input_value,
                     placeholder="Ask about symptoms, treatments, or health tips...",
                     key="user_input",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    disabled=st.session_state.processing
                 )
             
             with col_send:
-                send_button = st.button("Send", use_container_width=True)
+                send_button = st.button(
+                    "Send", 
+                    use_container_width=True,
+                    disabled=st.session_state.processing
+                )
 
         # Process input when send button is clicked
-        if send_button and user_input:
+        if send_button and user_input and not st.session_state.processing:
+            # Set processing state
+            st.session_state.processing = True
+            
             # Add user message to chat
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Generate AI response
-            with st.spinner(""):
-                try:
-                    answer = get_ai_response(user_input)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                except Exception as e:
-                    error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            # Generate AI response with typing effect
+            try:
+                # Get the AI response first
+                answer = get_ai_response(user_input)
+                
+                # Create a container for the typing effect
+                response_container = st.empty()
+                
+                # Show realistic typing effect
+                realistic_typing_effect(response_container, answer, len(st.session_state.messages))
+                
+                # Add the final message to session state
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+            except Exception as e:
+                error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            
+            # Reset processing state
+            st.session_state.processing = False
             
             # Rerun to update the chat display
             st.rerun()
 
-        # Auto-scroll to bottom after rerun
+        # Auto-scroll to bottom
         st.markdown(
             """
             <script>
