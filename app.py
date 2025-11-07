@@ -504,7 +504,6 @@ def show_login_page():
                                 {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
                             ]
                         st.success("Login successful!")
-                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error(message)
@@ -557,7 +556,6 @@ def show_register_page():
                         success, message = register_user(username, email, password)
                         if success:
                             st.success(message)
-                            time.sleep(1)
                             st.session_state.show_register = False
                             st.session_state.show_login = True
                             st.rerun()
@@ -624,17 +622,6 @@ def main():
         .stButton>button:hover {
             transform: translateY(-1px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        /* Secondary button style */
-        .secondary-button {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
-            color: #4a5568 !important;
-            border: 1.5px solid #e2e8f0 !important;
-        }
-        .secondary-button:hover {
-            border-color: #3a7bd5 !important;
-            color: #3a7bd5 !important;
         }
         
         /* Chat container */
@@ -774,7 +761,6 @@ def main():
                     {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
                 ]
                 st.success("Logged out successfully!")
-                time.sleep(1)
                 st.rerun()
         
         st.markdown("### Features")
@@ -803,4 +789,17 @@ def main():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        #
+        # Header
+        st.markdown("""
+            <div style='text-align: center; margin-bottom: 2rem;'>
+                <h1 style='color: #2d3748; font-size: 2.2rem; font-weight: 700; margin-bottom: 0.5rem;'>
+                    Health Assistant
+                </h1>
+                <p style='color: #718096; font-size: 1rem; margin: 0;'>
+                    Your AI-powered health companion
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Status indicator
+        if st.session_state.logged_in:
