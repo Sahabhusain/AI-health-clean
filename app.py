@@ -420,7 +420,8 @@ def create_quick_replies():
             if st.button(
                 question, 
                 key=f"quick_{i}", 
-                use_container_width=True
+                use_container_width=True,
+                type="secondary"
             ):
                 st.session_state.quick_question = question
                 st.rerun()
@@ -512,7 +513,7 @@ def show_login_page():
             
             st.markdown("---")
             st.markdown("Don't have an account?")
-            if st.button("Create New Account", use_container_width=True):
+            if st.button("Create New Account", use_container_width=True, type="secondary"):
                 st.session_state.show_login = False
                 st.session_state.show_register = True
                 st.rerun()
@@ -566,7 +567,7 @@ def show_register_page():
             
             st.markdown("---")
             st.markdown("Already have an account?")
-            if st.button("Sign In", use_container_width=True):
+            if st.button("Sign In", use_container_width=True, type="secondary"):
                 st.session_state.show_register = False
                 st.session_state.show_login = True
                 st.rerun()
@@ -622,6 +623,17 @@ def main():
         .stButton>button:hover {
             transform: translateY(-1px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Secondary buttons */
+        .stButton>button[kind="secondary"] {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #4a5568;
+            border: 1.5px solid #e2e8f0;
+        }
+        .stButton>button[kind="secondary"]:hover {
+            border-color: #3a7bd5;
+            color: #3a7bd5;
         }
         
         /* Chat container */
@@ -748,7 +760,7 @@ def main():
                     st.session_state.show_login = True
                     st.rerun()
             with col2:
-                if st.button("📝 Register", use_container_width=True):
+                if st.button("📝 Register", use_container_width=True, type="secondary"):
                     st.session_state.show_register = True
                     st.rerun()
         else:
@@ -781,7 +793,7 @@ def main():
         
         st.markdown("---")
         
-        if st.button("🔄 Clear Conversation", use_container_width=True):
+        if st.button("🔄 Clear Conversation", use_container_width=True, type="secondary"):
             clear_chat()
             st.rerun()
 
@@ -803,3 +815,118 @@ def main():
         
         # Status indicator
         if st.session_state.logged_in:
+            status_color = "linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)"
+            status_text = f"✅ Welcome {st.session_state.username}! • Chat History Saved"
+        else:
+            status_color = "linear-gradient(135deg, #a0aec0 0%, #718096 100%)"
+            status_text = "👤 Guest Mode • Chat history will not be saved"
+        
+        st.markdown(f"""
+            <div style='background: {status_color}; 
+                        padding: 1rem; border-radius: 16px; margin-bottom: 2rem; text-align: center;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
+                <div style='color: #2d3748; font-weight: 600; font-size: 14px;'>
+                    {status_text}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Chat container
+        chat_container = st.container()
+        with chat_container:
+            # Display all existing messages
+            for i, msg in enumerate(st.session_state.messages):
+                if i == len(st.session_state.messages) - 1 and msg["role"] == "assistant" and st.session_state.processing:
+                    # This will be handled by the typing effect
+                    pass
+                else:
+                    display_message(msg)
+            
+            # Show typing effect for the last message if processing
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user" and st.session_state.processing:
+                typing_container = st.empty()
+                # The typing effect will be shown when we generate the response
+
+        # Quick replies for new chats
+        if len(st.session_state.messages) <= 1 and not st.session_state.processing:
+            create_quick_replies()
+
+        # Input area
+        st.markdown("---")
+        
+        # Handle quick questions
+        current_input_value = ""
+        if hasattr(st.session_state, 'quick_question'):
+            current_input_value = st.session_state.quick_question
+            del st.session_state.quick_question
+
+        # Input form
+        input_container = st.container()
+        with input_container:
+            col_input, col_send = st.columns([4, 1])
+            
+            with col_input:
+                user_input = st.text_input(
+                    "Type your health question...",
+                    value=current_input_value,
+                    placeholder="Ask about symptoms, treatments, or health tips...",
+                    key="user_input",
+                    label_visibility="collapsed",
+                    disabled=st.session_state.processing
+                )
+            
+            with col_send:
+                send_button = st.button(
+                    "Send", 
+                    use_container_width=True,
+                    disabled=st.session_state.processing
+                )
+
+        # Process input when send button is clicked
+        if send_button and user_input and not st.session_state.processing:
+            # Set processing state
+            st.session_state.processing = True
+            
+            # Add user message to chat
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            # Generate AI response with typing effect
+            try:
+                # Get the AI response first
+                answer = get_ai_response(user_input)
+                
+                # Create a container for the typing effect
+                response_container = st.empty()
+                
+                # Show realistic typing effect
+                realistic_typing_effect(response_container, answer, len(st.session_state.messages))
+                
+                # Add the final message to session state
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+                # Save chat history if user is logged in
+                if st.session_state.logged_in:
+                    save_chat_history(st.session_state.username, st.session_state.messages)
+                
+            except Exception as e:
+                error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            
+            # Reset processing state
+            st.session_state.processing = False
+            
+            # Rerun to update the chat display
+            st.rerun()
+
+        # Auto-scroll to bottom
+        st.markdown(
+            """
+            <script>
+                window.scrollTo(0, document.body.scrollHeight);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
+if __name__ == "__main__":
+    main()
