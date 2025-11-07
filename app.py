@@ -10,6 +10,9 @@ from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import random
 from dotenv import load_dotenv
+import hashlib
+import json
+import re
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +21,7 @@ load_dotenv()
 DATA_PATH = r"C:\Users\sahah\Downloads\HealthChatbot\data"
 DB_FAISS_PATH = "vectorstore/db_faiss"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+USER_DATA_FILE = "users.json"
 
 CUSTOM_PROMPT_TEMPLATE = """
 You are HealthBot, an AI health assistant. Use the provided context to give detailed and accurate health information.
@@ -33,6 +37,88 @@ def set_custom_prompt():
         template=CUSTOM_PROMPT_TEMPLATE,
         input_variables=["context", "question"]
     )
+
+# -------- User Authentication Functions --------
+def hash_password(password):
+    """Hash a password for storing."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users():
+    """Load users from JSON file."""
+    try:
+        if os.path.exists(USER_DATA_FILE):
+            with open(USER_DATA_FILE, 'r') as f:
+                return json.load(f)
+    except:
+        pass
+    return {}
+
+def save_users(users):
+    """Save users to JSON file."""
+    try:
+        with open(USER_DATA_FILE, 'w') as f:
+            json.dump(users, f, indent=4)
+        return True
+    except:
+        return False
+
+def register_user(username, email, password):
+    """Register a new user."""
+    users = load_users()
+    
+    # Check if username already exists
+    if username in users:
+        return False, "Username already exists"
+    
+    # Check if email already exists
+    for user in users.values():
+        if user['email'] == email:
+            return False, "Email already registered"
+    
+    # Validate email format
+    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        return False, "Invalid email format"
+    
+    # Validate password strength
+    if len(password) < 6:
+        return False, "Password must be at least 6 characters long"
+    
+    # Create new user
+    users[username] = {
+        'email': email,
+        'password': hash_password(password),
+        'created_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'chat_history': []
+    }
+    
+    if save_users(users):
+        return True, "Registration successful!"
+    else:
+        return False, "Registration failed. Please try again."
+
+def login_user(username, password):
+    """Login user."""
+    users = load_users()
+    
+    if username in users:
+        if users[username]['password'] == hash_password(password):
+            return True, "Login successful!"
+    
+    return False, "Invalid username or password"
+
+def save_chat_history(username, messages):
+    """Save chat history for user."""
+    users = load_users()
+    if username in users:
+        users[username]['chat_history'] = messages
+        save_users(users)
+
+def load_chat_history(username):
+    """Load chat history for user."""
+    users = load_users()
+    if username in users:
+        return users[username].get('chat_history', [])
+    return []
 
 # -------- Vectorstore Load/Build --------
 @st.cache_resource
@@ -345,6 +431,9 @@ def clear_chat():
     st.session_state.messages = [
         {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
     ]
+    # Save chat history if user is logged in
+    if st.session_state.get('logged_in'):
+        save_chat_history(st.session_state.username, st.session_state.messages)
 
 # -------- Get AI Response --------
 def get_ai_response(question):
@@ -377,6 +466,111 @@ def get_ai_response(question):
     except Exception as e:
         # Final fallback if everything fails
         return get_direct_ai_response(question)
+
+# -------- Authentication Pages --------
+def show_login_page():
+    """Display login page"""
+    st.markdown("""
+        <div style='text-align: center; margin-bottom: 2rem;'>
+            <h1 style='color: #2d3748; font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;'>
+                🏥 Health Assistant
+            </h1>
+            <p style='color: #718096; font-size: 1.1rem; margin: 0;'>
+                Sign in to your account
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("login_form"):
+            st.subheader("🔐 Login")
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            login_button = st.form_submit_button("Sign In", use_container_width=True)
+            
+            if login_button:
+                if username and password:
+                    success, message = login_user(username, password)
+                    if success:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.session_state.show_login = False
+                        st.session_state.show_register = False
+                        # Load user's chat history
+                        st.session_state.messages = load_chat_history(username)
+                        if not st.session_state.messages:
+                            st.session_state.messages = [
+                                {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
+                            ]
+                        st.success("Login successful!")
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    st.error("Please fill in all fields")
+            
+            st.markdown("---")
+            st.markdown("Don't have an account?")
+            if st.button("Create New Account", use_container_width=True, type="secondary"):
+                st.session_state.show_login = False
+                st.session_state.show_register = True
+                st.rerun()
+            
+            st.markdown("---")
+            if st.button("Continue as Guest", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.show_login = False
+                st.session_state.show_register = False
+                st.rerun()
+
+def show_register_page():
+    """Display registration page"""
+    st.markdown("""
+        <div style='text-align: center; margin-bottom: 2rem;'>
+            <h1 style='color: #2d3748; font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem;'>
+                🏥 Health Assistant
+            </h1>
+            <p style='color: #718096; font-size: 1.1rem; margin: 0;'>
+                Create a new account
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("register_form"):
+            st.subheader("📝 Create Account")
+            username = st.text_input("Username", placeholder="Choose a username")
+            email = st.text_input("Email", placeholder="Enter your email")
+            password = st.text_input("Password", type="password", placeholder="Create a password (min. 6 characters)")
+            confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm your password")
+            register_button = st.form_submit_button("Create Account", use_container_width=True)
+            
+            if register_button:
+                if username and email and password and confirm_password:
+                    if password != confirm_password:
+                        st.error("Passwords do not match!")
+                    else:
+                        success, message = register_user(username, email, password)
+                        if success:
+                            st.success(message)
+                            st.session_state.show_register = False
+                            st.session_state.show_login = True
+                            st.rerun()
+                        else:
+                            st.error(message)
+                else:
+                    st.error("Please fill in all fields")
+            
+            st.markdown("---")
+            st.markdown("Already have an account?")
+            if st.button("Sign In", use_container_width=True, type="secondary"):
+                st.session_state.show_register = False
+                st.session_state.show_login = True
+                st.rerun()
 
 # -------- Main App --------
 def main():
@@ -478,13 +672,29 @@ def main():
     """, unsafe_allow_html=True)
 
     # Initialize session state
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'username' not in st.session_state:
+        st.session_state.username = None
+    if 'show_login' not in st.session_state:
+        st.session_state.show_login = False
+    if 'show_register' not in st.session_state:
+        st.session_state.show_register = False
     if 'messages' not in st.session_state:
         st.session_state.messages = [
             {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
         ]
-    
     if 'processing' not in st.session_state:
         st.session_state.processing = False
+
+    # Show authentication pages if needed
+    if st.session_state.show_login:
+        show_login_page()
+        return
+        
+    if st.session_state.show_register:
+        show_register_page()
+        return
 
     # Sidebar with modern design
     with st.sidebar:
@@ -498,16 +708,72 @@ def main():
             </div>
         """, unsafe_allow_html=True)
         
-        # Stats card
-        st.markdown(f"""
-            <div style='background: white; padding: 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; 
-                        box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='color: #718096; font-size: 14px;'>Messages</span>
-                    <span style='color: #3a7bd5; font-weight: 700; font-size: 18px;'>{len(st.session_state.messages)}</span>
+        # User info card
+        if st.session_state.logged_in:
+            st.markdown(f"""
+                <div style='background: white; padding: 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; 
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
+                    <div style='display: flex; align-items: center; margin-bottom: 1rem;'>
+                        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                    width: 40px; height: 40px; border-radius: 50%; 
+                                    display: flex; align-items: center; justify-content: center; margin-right: 12px;'>
+                            <span style='color: white; font-weight: bold;'>{st.session_state.username[0].upper()}</span>
+                        </div>
+                        <div>
+                            <div style='font-weight: 600; color: #2d3748;'>{st.session_state.username}</div>
+                            <div style='font-size: 12px; color: #718096;'>Premium User</div>
+                        </div>
+                    </div>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <span style='color: #718096; font-size: 14px;'>Messages</span>
+                        <span style='color: #3a7bd5; font-weight: 700; font-size: 18px;'>{len(st.session_state.messages)}</span>
+                    </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+                <div style='background: white; padding: 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; 
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
+                    <div style='display: flex; align-items: center; margin-bottom: 1rem;'>
+                        <div style='background: linear-gradient(135deg, #a0aec0 0%, #718096 100%); 
+                                    width: 40px; height: 40px; border-radius: 50%; 
+                                    display: flex; align-items: center; justify-content: center; margin-right: 12px;'>
+                            <span style='color: white; font-weight: bold;'>G</span>
+                        </div>
+                        <div>
+                            <div style='font-weight: 600; color: #2d3748;'>Guest User</div>
+                            <div style='font-size: 12px; color: #718096;'>Limited Access</div>
+                        </div>
+                    </div>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <span style='color: #718096; font-size: 14px;'>Messages</span>
+                        <span style='color: #3a7bd5; font-weight: 700; font-size: 18px;'>{len(st.session_state.messages)}</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        # Authentication buttons
+        if not st.session_state.logged_in:
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔐 Login", use_container_width=True):
+                    st.session_state.show_login = True
+                    st.rerun()
+            with col2:
+                if st.button("📝 Register", use_container_width=True, type="secondary"):
+                    st.session_state.show_register = True
+                    st.rerun()
+        else:
+            if st.button("🚪 Logout", use_container_width=True):
+                # Save chat history before logout
+                save_chat_history(st.session_state.username, st.session_state.messages)
+                st.session_state.logged_in = False
+                st.session_state.username = None
+                st.session_state.messages = [
+                    {"role": "assistant", "content": "Hello! I'm your Health Assistant, here to provide you with reliable health information and guidance. I can help you understand symptoms, provide wellness tips, and offer general health advice. Remember, I'm an AI assistant and not a substitute for professional medical care. How can I help you today?"}
+                ]
+                st.success("Logged out successfully!")
+                st.rerun()
         
         st.markdown("### Features")
         features = [
@@ -548,12 +814,19 @@ def main():
         """, unsafe_allow_html=True)
         
         # Status indicator
-        st.markdown("""
-            <div style='background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); 
+        if st.session_state.logged_in:
+            status_color = "linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)"
+            status_text = f"✅ Welcome {st.session_state.username}! • Chat History Saved"
+        else:
+            status_color = "linear-gradient(135deg, #a0aec0 0%, #718096 100%)"
+            status_text = "👤 Guest Mode • Chat history will not be saved"
+        
+        st.markdown(f"""
+            <div style='background: {status_color}; 
                         padding: 1rem; border-radius: 16px; margin-bottom: 2rem; text-align: center;
                         box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
                 <div style='color: #2d3748; font-weight: 600; font-size: 14px;'>
-                    ✅ System Ready • AI Assistant Online
+                    {status_text}
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -630,6 +903,10 @@ def main():
                 
                 # Add the final message to session state
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+                # Save chat history if user is logged in
+                if st.session_state.logged_in:
+                    save_chat_history(st.session_state.username, st.session_state.messages)
                 
             except Exception as e:
                 error_msg = f"I apologize, but I'm experiencing technical difficulties. Please try again in a moment."
