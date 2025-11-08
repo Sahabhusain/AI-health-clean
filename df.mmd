@@ -1,1 +1,45 @@
+graph TD
+  %% Entities
+  User[👤 User]
+  ExtAI[☁️ Groq AI API]
 
+  %% Processes
+  P1(1.0 Login / Register<br/>app.py)
+  P2(2.0 Handle User Query<br/>app.py UI)
+  P3(3.0 Process Query & RAG<br/>llm.py)
+  P4(4.0 Generate Embeddings<br/>create.py)
+
+  %% Data Stores
+  D1[(users.json<br/>User Data)]
+  D2[(FAISS Index<br/>Vector Store)]
+  D3[(Raw PDFs<br/>Data Folder)]
+
+  %% Data Flows
+  User -->|Credentials| P1
+  P1 <-->|Verify/Save| D1
+  P1 -->|Session Valid| P2
+
+  User -->|Health Question| P2
+  P2 -->|Forward Query| P3
+  
+  D3 -->|Load PDFs| P4
+  P4 -->|Save Vectors| D2
+
+  P3 -->|Similarity Search| D2
+  D2 -->|Return Context| P3
+
+  P3 -->|Send Prompt + Context| ExtAI
+  ExtAI -->|Return Answer| P3
+
+  P3 -->|Formatted Response| P2
+  P2 -->|Display Answer| User
+  P2 -->|Save Chat History| D1
+
+  %% Styling
+  classDef entity fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+  classDef process fill:#fff3e0,stroke:#e65100,stroke-width:2px,rx:10px,ry:10px;
+  classDef store fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+
+  class User,ExtAI entity;
+  class P1,P2,P3,P4 process;
+  class D1,D2,D3 store;
