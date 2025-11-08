@@ -1,0 +1,52 @@
+graph TD
+    %% Define styles
+    classDef user fill:#E1F5FE,stroke:#01579B,stroke-width:2px,rx:10px,ry:10px,color:black;
+    classDef frontend fill:#FFF3E0,stroke:#E65100,stroke-width:2px,rx:10px,ry:10px,color:black;
+    classDef backend fill:#E8F5E9,stroke:#1B5E20,stroke-width:2px,rx:10px,ry:10px,color:black;
+    classDef data fill:#F3E5F5,stroke:#4A148C,stroke-width:2px,rx:0px,ry:0px,color:black;
+    classDef external fill:#FFEBEE,stroke:#B71C1C,stroke-width:2px,rx:10px,ry:10px,stroke-dasharray: 5 5,color:black;
+
+    %% Top Level User
+    User[👤 End User]:::user
+
+    %% Subgraph: Presentation Layer
+    subgraph Presentation ["🖥️ Presentation Layer (Frontend)"]
+        UI[Streamlit Interface<br/>app.py]:::frontend
+        Auth[User Authentication<br/>Login/Register]:::frontend
+    end
+
+    %% Subgraph: Application Layer
+    subgraph Application ["⚙️ Application Layer (Backend)"]
+        Orchestrator[RAG Orchestrator<br/>llm.py]:::backend
+        DocProcessor[Document Processor<br/>create.py]:::backend
+    end
+
+    %% Subgraph: Data Layer
+    subgraph Data ["💾 Data Layer (Storage)"]
+        RawPDFs[(Raw PDFs<br/>data/ folder)]:::data
+        VectorDB[(Vector Database<br/>FAISS Index)]:::data
+        UserDB[(User Records<br/>users.json)]:::data
+    end
+
+    %% Subgraph: External Services
+    subgraph External ["☁️ External Services"]
+        GroqAPI[🚀 Groq AI API<br/>Llama-3 Model]:::external
+    end
+
+    %% Relationships - Data Preparation Flow
+    RawPDFs ==>|1. Load & Chunk| DocProcessor
+    DocProcessor ==>|2. Generate Embeddings| VectorDB
+
+    %% Relationships - Runtime Flow
+    User <-->|Interact| UI
+    UI <-->|Verify Credentials| Auth
+    Auth <-->|Read/Write| UserDB
+    
+    UI -->|3. Send Query| Orchestrator
+    Orchestrator -->|4. Similarity Search| VectorDB
+    VectorDB -.->|5. Return Top-k Context| Orchestrator
+    
+    Orchestrator -->|6. Send Prompt + Context| GroqAPI
+    GroqAPI -.->|7. Return Generated Answer| Orchestrator
+    
+    Orchestrator -->|8. Final Response| UI
