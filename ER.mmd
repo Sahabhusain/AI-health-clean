@@ -1,1 +1,57 @@
+erDiagram
+    USER {
+        varchar username PK
+        varchar email UK
+        varchar password_hash
+        timestamp created_at
+    }
 
+    CHAT_SESSION {
+        int session_id PK
+        varchar username FK
+        varchar session_title
+        timestamp created_at
+    }
+
+    MESSAGE {
+        int message_id PK
+        int session_id FK
+        varchar role
+        text content
+        timestamp timestamp
+    }
+
+    KNOWLEDGE_SOURCE {
+        int source_id PK
+        varchar source_name
+        varchar uploaded_by FK
+        varchar processing_status
+    }
+
+    DOCUMENT_CHUNK {
+        int chunk_id PK
+        int source_id FK
+        text chunk_content
+        vector embedding_vector
+    }
+
+    AI_MODEL {
+        int model_id PK
+        varchar model_name
+        varchar provider
+    }
+
+    API_USAGE {
+        int usage_id PK
+        varchar username FK
+        int model_id FK
+        int total_tokens
+        timestamp request_time
+    }
+
+    USER ||--o{ CHAT_SESSION : "has"
+    CHAT_SESSION ||--o{ MESSAGE : "contains"
+    USER ||--o{ KNOWLEDGE_SOURCE : "uploads"
+    KNOWLEDGE_SOURCE ||--o{ DOCUMENT_CHUNK : "contains"
+    USER ||--o{ API_USAGE : "generates"
+    API_USAGE }o--|| AI_MODEL : "uses"
